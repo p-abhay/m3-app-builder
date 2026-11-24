@@ -1,0 +1,217 @@
+import type { ComponentType } from "@/ast/types";
+
+export type PaletteCategory =
+  | "layout"
+  | "actions"
+  | "navigation"
+  | "inputs"
+  | "display"
+  | "feedback";
+
+export interface PalettePartMeta {
+  type: ComponentType;
+  label: string;
+  description: string;
+  icon: string;
+  category: PaletteCategory;
+  targetSlot: "topBarId" | "fabId" | "body";
+}
+
+export const PALETTE_CATEGORIES: { key: PaletteCategory; label: string; icon: string }[] = [
+  { key: "layout", label: "Layout & Containment", icon: "dashboard" },
+  { key: "actions", label: "Actions & Buttons", icon: "touch_app" },
+  { key: "navigation", label: "Scaffold Chrome", icon: "toolbar" },
+  { key: "inputs", label: "Inputs & Selection", icon: "toggle_on" },
+  { key: "display", label: "Display & Content", icon: "notes" },
+  { key: "feedback", label: "Progress & M3E", icon: "progress_activity" },
+];
+
+export const PALETTE_PARTS: PalettePartMeta[] = [
+  // Layout & Containment
+  {
+    type: "Column",
+    label: "Column",
+    description: "Vertical flex container",
+    icon: "view_agenda",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
+    type: "Row",
+    label: "Row",
+    description: "Horizontal flex & button group",
+    icon: "view_column",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
+    type: "Box",
+    label: "Box",
+    description: "Overlay & aligned container",
+    icon: "check_box_outline_blank",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
+    type: "Card",
+    label: "Card",
+    description: "Elevated, filled, or outlined",
+    icon: "crop_landscape",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
+    type: "ListItem",
+    label: "List Item",
+    description: "Headline, supporting & trailing",
+    icon: "list",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
+    type: "Spacer",
+    label: "Spacer",
+    description: "Vertical spacing dp gap",
+    icon: "height",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
+    type: "Divider",
+    label: "Divider",
+    description: "Full or inset hairline",
+    icon: "horizontal_rule",
+    category: "layout",
+    targetSlot: "body",
+  },
+
+  // Actions
+  {
+    type: "Button",
+    label: "Button",
+    description: "Filled, tonal, outlined, text",
+    icon: "smart_button",
+    category: "actions",
+    targetSlot: "body",
+  },
+  {
+    type: "IconButton",
+    label: "Icon Button",
+    description: "Circular M3 icon trigger",
+    icon: "radio_button_checked",
+    category: "actions",
+    targetSlot: "body",
+  },
+  {
+    type: "Chip",
+    label: "Chip",
+    description: "Filter, assist, or input chip",
+    icon: "label",
+    category: "actions",
+    targetSlot: "body",
+  },
+
+  // Scaffold Chrome
+  {
+    type: "TopAppBar",
+    label: "Top App Bar",
+    description: "Scaffold topBar slot",
+    icon: "toolbar",
+    category: "navigation",
+    targetSlot: "topBarId",
+  },
+  {
+    type: "FloatingActionButton",
+    label: "FAB",
+    description: "Scaffold floatingActionButton",
+    icon: "add_circle",
+    category: "navigation",
+    targetSlot: "fabId",
+  },
+
+  // Inputs
+  {
+    type: "TextField",
+    label: "Text Field",
+    description: "Outlined or filled text input",
+    icon: "input",
+    category: "inputs",
+    targetSlot: "body",
+  },
+  {
+    type: "Switch",
+    label: "Switch",
+    description: "M3 thumb toggle switch",
+    icon: "toggle_on",
+    category: "inputs",
+    targetSlot: "body",
+  },
+  {
+    type: "Checkbox",
+    label: "Checkbox",
+    description: "Boolean checkbox with label",
+    icon: "check_box",
+    category: "inputs",
+    targetSlot: "body",
+  },
+  {
+    type: "Slider",
+    label: "Slider",
+    description: "Continuous tonal slider",
+    icon: "tune",
+    category: "inputs",
+    targetSlot: "body",
+  },
+
+  // Display
+  {
+    type: "Text",
+    label: "Text",
+    description: "Material 3 typography scale",
+    icon: "title",
+    category: "display",
+    targetSlot: "body",
+  },
+  {
+    type: "Icon",
+    label: "Icon",
+    description: "Material Symbol vector icon",
+    icon: "star",
+    category: "display",
+    targetSlot: "body",
+  },
+  {
+    type: "Image",
+    label: "Image",
+    description: "Media with aspect & shape crop",
+    icon: "image",
+    category: "display",
+    targetSlot: "body",
+  },
+  {
+    type: "Badge",
+    label: "Badge",
+    description: "Status & label pill badge",
+    icon: "new_releases",
+    category: "display",
+    targetSlot: "body",
+  },
+
+  // Feedback / M3E
+  {
+    type: "LoadingIndicator",
+    label: "M3E Loader",
+    description: "Shape-morphing loading indicator",
+    icon: "motion_photos_on",
+    category: "feedback",
+    targetSlot: "body",
+  },
+  {
+    type: "ProgressBar",
+    label: "Progress Bar",
+    description: "Flat or wavy linear progress",
+    icon: "linear_scale",
+    category: "feedback",
+    targetSlot: "body",
+  },
+];
