@@ -4,6 +4,7 @@ import { usePreviewStore } from "@/store/usePreviewStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { BuilderDndProvider } from "@/components/dnd/BuilderDndProvider";
 import { DevicePreview } from "@/components/DevicePreview";
+import { ComposeExportModal } from "@/components/ComposeExportModal";
 import { LeftSidebar } from "@/components/LeftSidebar";
 import { ProjectJsonModal } from "@/components/ProjectJsonModal";
 import { ReleaseNotesModal } from "@/components/ReleaseNotesModal";
@@ -29,6 +30,7 @@ function StudioShell() {
 
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
+  const [kotlinOpen, setKotlinOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
 
   const activeScreen =
@@ -238,6 +240,21 @@ function StudioShell() {
 
           <button
             type="button"
+            data-testid="export-kotlin-button"
+            onClick={() => setKotlinOpen(true)}
+            className="m3-press flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold cursor-pointer border-0"
+            style={{
+              borderRadius: shapes.full,
+              backgroundColor: palette.primaryContainer,
+              color: palette.onPrimaryContainer,
+            }}
+          >
+            <Icon name="android" size={16} />
+            <span>Export Kotlin</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => updateTheme({ mode: theme.mode === "dark" ? "light" : "dark" })}
             className="m3-press flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold cursor-pointer border-0"
             style={{
@@ -280,6 +297,7 @@ function StudioShell() {
 
       <TemplatesModal open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
       <ProjectJsonModal open={jsonOpen} onClose={() => setJsonOpen(false)} />
+      <ComposeExportModal open={kotlinOpen} onClose={() => setKotlinOpen(false)} />
       <ReleaseNotesModal open={infoOpen} onClose={() => setInfoOpen(false)} />
     </div>
   );
