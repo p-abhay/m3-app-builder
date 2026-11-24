@@ -158,6 +158,16 @@ npm.cmd run dev
 
 ---
 
+## CI/CD & GitHub Pages Hosting
+
+- **Pull Request Quality Gate ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))**: Runs on PRs targeting `main` (opening, reopening, and every commit pushed to the PR branch) plus manual dispatch. Executes Node 22 typecheck, AST unit tests, production build, and headless Playwright Chromium E2E tests (`Playwright E2E`), uploading traces/reports if any test fails.
+- **GitHub Pages Deployment ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))**: Runs on pushes to `main` (and manual dispatch). Re-runs the full `ci.yml` verification suite first, builds with the repository subpath (`VITE_BASE_PATH`), and deploys to **GitHub Pages** (`https://p-abhay.github.io/m3-app-builder/`).
+- **One-Time GitHub Repo Settings**:
+  1. **Settings → Pages → Source**: Select **GitHub Actions**.
+  2. **Settings → Branches → Branch protection rules (`main`)**: Enable **Require a pull request before merging** and **Require status checks to pass before merging** (`Typecheck, Unit Tests & Build`, `Playwright E2E`).
+
+---
+
 ## Roadmap Beyond V1
 
 1. **V2 — Kotlin + Jetpack Compose Exporter**: Direct AST-to-Kotlin compiler generating `Color.kt`, `Theme.kt`, `Type.kt`, `Shape.kt`, composable screen files, and `AppNavHost.kt` packaged as a downloadable Android Studio Gradle project.
