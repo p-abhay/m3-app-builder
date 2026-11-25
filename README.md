@@ -2,23 +2,23 @@
 
 A visual, no-code Android UI builder and live **Material 3 Expressive (`M3E`)** design studio built with **React 18, TypeScript, Vite, Tailwind CSS v4, Zustand, `@dnd-kit`, and `motion`**.
 
-Inspired by Android Jetpack Compose architecture and Material 3 Expressive token design, releases follow pre-`1.0.0` SemVer (`0.1.0` for V1, `0.2.0` for V2, building toward `v1.0.0` GA).
+Inspired by Android Jetpack Compose architecture and Material 3 Expressive token design, releases follow pre-`1.0.0` SemVer (`0.1.0`, `0.2.0`, `0.3.0`...) building toward `v1.0.0` GA.
 
 ---
 
 ## Milestones Overview
 
-| Version | Milestone | Status | Scope & Key Deliverables |
+| Version | Scope | Status | Key Deliverables |
 | --- | --- | --- | --- |
-| **`v0.1.0`** | **V1 — Visual Android Studio, M3E Theming & Interactive Preview** | **Completed** | Phases 1–5 + Studio Release Notes dialog: M3E theme/system token engine, normalized multi-screen Android AST, 4 starter templates, 22 M3 components, slot-aware DnD & AST tree editor, Property Inspector, Material Symbols picker, and isolated multi-screen runtime preview. |
-| **`v0.2.0`** | **V2 — Kotlin + Jetpack Compose Export & Gradle `.zip` (Phases 6–7)** | **Completed (Current)** | Phase 6–7: Kotlin + Jetpack Compose AST compiler (`Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt`, `*Screen.kt`, `AppNavHost.kt`, `MainActivity.kt`), Hybrid Stable M3 + M3 Expressive Alpha toggle, live Android package/SDK configuration, and full Android Studio Gradle `.zip` export. Verified by 16 unit tests and 32 Playwright E2E specs. |
-| **`v0.3.0`** | **V3 — State Variables, Data Binding & AI Screen Co-Pilot (Phase 8)** | **Planned Next** | Screen/app state variables (`remember { mutableStateOf }`), mock JSON dataset binding, `LazyColumn` list repeaters, conditional visibility, and AI design spec / AST patch bridge. |
-| **`v0.4.0`** | **V4 — Adaptive Tablet Layouts & Overlays** | **Roadmap** | Automatic `NavigationBar` → `NavigationRail` adaptation on tablet breakpoints, `ModalBottomSheet`, and `AlertDialog` overlays. |
-| **`v1.0.0`** | **GA — Cloud APK Delivery & GitHub Sync** | **Target 1.0** | Direct GitHub repository export sync, cloud Android APK preview builds, and full Studio 1.0 stability. |
+| **`v0.1.0`** | **Visual Android Studio, M3E Theming & Interactive Preview** | **Completed** | Phases 1–5 + Release Notes dialog: M3E theme/system token engine, normalized multi-screen Android AST, 4 starter templates, 22 M3 components, slot-aware DnD & AST tree editor, Property Inspector, Material Symbols picker, and isolated multi-screen runtime preview. |
+| **`v0.2.0`** | **Kotlin + Jetpack Compose Export & Gradle `.zip`** | **Completed (Current)** | Phases 6–7: Kotlin + Jetpack Compose AST compiler (`Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt`, `*Screen.kt`, `AppNavHost.kt`, `MainActivity.kt`), Hybrid Stable M3 + M3 Expressive Alpha toggle, live Android package/SDK configuration, and full Android Studio Gradle `.zip` export. Verified by 17 unit tests and 32 Playwright E2E specs. |
+| **`v0.3.0`** | **State Variables, Data Binding & AI Screen Co-Pilot** | **Planned Next** | Phase 8: Screen/app state variables (`remember { mutableStateOf }`), mock JSON dataset binding, `LazyColumn` list repeaters, conditional visibility, and AI design spec / AST patch bridge. |
+| **`v0.4.0`** | **Adaptive Tablet Layouts & Overlays** | **Roadmap** | Automatic `NavigationBar` → `NavigationRail` adaptation on tablet breakpoints, `ModalBottomSheet`, and `AlertDialog` overlays. |
+| **`v1.0.0`** | **Cloud APK Delivery & GitHub Sync** | **Target 1.0** | Direct GitHub repository export sync, cloud Android APK preview builds, and full Studio 1.0 stability. |
 
 ---
 
-## V1 Build Phases (Implemented)
+## `v0.1.0` Build Phases (Phases 1–5)
 
 ### Phase 1: Material 3 Expressive Theme & System Engine
 *Files: [`src/theme/`](src/theme/), [`src/components/ThemePanel.tsx`](src/components/ThemePanel.tsx), [`src/components/TokenInspectorSidebar.tsx`](src/components/TokenInspectorSidebar.tsx)*
@@ -63,11 +63,11 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 ### Studio Info & Release Notes Modal
 *Files: [`src/components/ReleaseNotesModal.tsx`](src/components/ReleaseNotesModal.tsx), [`src/version.ts`](src/version.ts), [`src/App.tsx`](src/App.tsx)*
 
-- Clicking the **`i` info icon** next to the `v0.2.0 Studio` pill in the top header opens the SemVer release modal with **Release Notes** (`V2` / `v0.2.0` and `V1` / `v0.1.0` sections) and **Future** (`v0.3.0` → `v1.0.0` roadmap).
+- Clicking the **`i` info icon** next to the `v0.2.0 Studio` pill in the top header opens the SemVer release modal with **Release Notes** (`v0.2.0` and `v0.1.0`) and **Future** (`v0.3.0` → `v1.0.0` roadmap).
 
 ---
 
-## V2 Build Phases (Implemented — `v0.2.0`)
+## `v0.2.0` Build Phases (Phases 6–7)
 
 ### Phase 6: Kotlin + Jetpack Compose AST Compiler & Live Code Viewer
 *Files: [`src/codegen/compose/`](src/codegen/compose/), [`src/components/ComposeExportModal.tsx`](src/components/ComposeExportModal.tsx)*
@@ -138,7 +138,7 @@ m3-app-builder/
 │   │   ├── ThemePanel.tsx      # Color presets, dynamic wallpaper, fonts, shapes, density, bars
 │   │   ├── TemplatesModal.tsx  # Starter template browser
 │   │   ├── ProjectJsonModal.tsx# AST JSON import/export modal
-│   │   └── ReleaseNotesModal.tsx # SemVer V1/V2 Release Notes & Future Roadmap modal
+│   │   └── ReleaseNotesModal.tsx # SemVer Release Notes (v0.2.0/v0.1.0) & Future Roadmap modal
 │   ├── store/
 │   │   ├── useProjectStore.ts  # Undoable AST + Theme state + localStorage persistence
 │   │   └── usePreviewStore.ts  # Isolated preview runtime state, nav stack & Snackbar

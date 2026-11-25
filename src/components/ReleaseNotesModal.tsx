@@ -16,8 +16,6 @@ interface FeatureItem {
 }
 
 interface ReleaseGroup {
-  id: "v2" | "v1";
-  heading: string;
   version: string;
   subtitle: string;
   isCurrent?: boolean;
@@ -26,8 +24,6 @@ interface ReleaseGroup {
 
 const RELEASE_GROUPS: ReleaseGroup[] = [
   {
-    id: "v2",
-    heading: "V2",
     version: APP_MILESTONE_LABEL,
     subtitle: "Kotlin + Jetpack Compose Export & Android Studio Gradle Project",
     isCurrent: true,
@@ -55,8 +51,6 @@ const RELEASE_GROUPS: ReleaseGroup[] = [
     ],
   },
   {
-    id: "v1",
-    heading: "V1",
     version: "v0.1.0",
     subtitle: "Visual Android Studio, M3E Theming & Interactive Preview",
     items: [
@@ -304,28 +298,25 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
           {tab === "release"
             ? RELEASE_GROUPS.map((group) => (
                 <section
-                  key={group.id}
-                  data-testid={`release-group-${group.id}`}
+                  key={group.version}
+                  data-testid={`release-group-${group.version}`}
                   className="space-y-2.5"
                 >
                   <div className="flex items-center justify-between gap-2 px-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <h3 className="text-sm font-bold tracking-tight">{group.heading}</h3>
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5"
-                        style={{
-                          borderRadius: shapes.full,
-                          backgroundColor: group.isCurrent
-                            ? palette.primaryContainer
-                            : palette.surfaceContainerHighest,
-                          color: group.isCurrent
-                            ? palette.onPrimaryContainer
-                            : palette.onSurfaceVariant,
-                        }}
-                      >
-                        {group.version}
-                        {group.isCurrent ? " • Current" : ""}
-                      </span>
+                      <h3 className="text-sm font-bold tracking-tight">{group.version}</h3>
+                      {group.isCurrent && (
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5"
+                          style={{
+                            borderRadius: shapes.full,
+                            backgroundColor: palette.primaryContainer,
+                            color: palette.onPrimaryContainer,
+                          }}
+                        >
+                          Current
+                        </span>
+                      )}
                     </div>
                     <span className="text-[11px] truncate" style={{ color: palette.onSurfaceVariant }}>
                       {group.subtitle}
