@@ -98,6 +98,7 @@ describe("Phase 7: ZIP Archiver & Android Studio Gradle Exporter", () => {
         "build.gradle.kts",
         "gradle.properties",
         "gradle/libs.versions.toml",
+        "gradle/wrapper/gradle-wrapper.properties",
         "app/build.gradle.kts",
         "app/src/main/AndroidManifest.xml",
         "app/src/main/res/values/strings.xml",
@@ -106,6 +107,14 @@ describe("Phase 7: ZIP Archiver & Android Studio Gradle Exporter", () => {
       ]) {
         assert.ok(byPath.has(requiredPath), `Missing ${requiredPath} in zip for ${tpl.id}`);
       }
+
+      const appGradle = byPath.get("app/build.gradle.kts")!;
+      assert.match(appGradle, /org\.jetbrains\.kotlin\.gradle\.dsl\.JvmTarget/);
+      assert.match(appGradle, /compilerOptions\s*\{\s*jvmTarget\.set\(JvmTarget\.JVM_17\)/);
+      assert.ok(!appGradle.includes("kotlinOptions"), `Deprecated kotlinOptions found in ${tpl.id}`);
+
+      const wrapperProps = byPath.get("gradle/wrapper/gradle-wrapper.properties")!;
+      assert.match(wrapperProps, /gradle-8\.11\.1-bin\.zip/);
 
       const pkgPath = bundle.packageName.replace(/\./g, "/");
       assert.ok(byPath.has(`app/src/main/java/${pkgPath}/MainActivity.kt`));

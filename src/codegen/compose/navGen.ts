@@ -79,6 +79,7 @@ export function generateNavAndActivityFiles(
     `package ${pkg}.ui.navigation`,
     "",
     "import androidx.compose.material.icons.Icons",
+    "import androidx.compose.material.icons.automirrored.rounded.*",
     "import androidx.compose.material.icons.rounded.*",
     "import androidx.compose.material3.*",
     "import androidx.compose.runtime.*",

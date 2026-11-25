@@ -9,6 +9,7 @@ import {
   kotlinString,
   toCamelCase,
   toMaterialIconRef,
+  type ModifierOptions,
 } from "./utils.ts";
 
 interface ScreenGenContext {
@@ -19,6 +20,21 @@ interface ScreenGenContext {
   stateCounter: Record<string, number>;
   diagnostics: ComposeDiagnostic[];
   needsExperimentalLayout: boolean;
+  reportedNestedScrollWarning: boolean;
+}
+
+interface ChildScope {
+  parentKind: "column" | "row" | "flowRow" | "box";
+  hasVerticalScrollAncestor: boolean;
+  flowVerticalAlign?: "top" | "center" | "bottom";
+}
+
+function childModOpts(scope: ChildScope, extraOpts: ModifierOptions = {}): ModifierOptions {
+  return {
+    inRowScope: scope.parentKind === "row",
+    alignInFlowRow: scope.parentKind === "flowRow" ? scope.flowVerticalAlign : undefined,
+    ...extraOpts,
+  };
 }
 
 function nextStateVar(ctx: ScreenGenContext, base: string): string {
@@ -44,10 +60,14 @@ function emitActionLambda(ctx: ScreenGenContext, node: ComponentNode): string {
   return `{ ${stmts.join("; ")} }`;
 }
 
-function emitColumnOrRowChildren(ctx: ScreenGenContext, node: ComponentNode): string[] {
+function emitContainerChildren(
+  ctx: ScreenGenContext,
+  node: ComponentNode,
+  scope: ChildScope,
+): string[] {
   const out: string[] = [];
   for (const childId of node.childIds) {
-    out.push(...emitNode(ctx, childId));
+    out.push(...emitNode(ctx, childId, scope));
   }
   return out;
 }
@@ -172,7 +192,11 @@ function emitFab(ctx: ScreenGenContext, node: NodeOfType<"FloatingActionButton">
   ];
 }
 
-function emitButton(ctx: ScreenGenContext, node: NodeOfType<"Button">): string[] {
+function emitButton(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"Button">,
+  scope: ChildScope,
+): string[] {
   const fnMap: Record<NodeOfType<"Button">["props"]["variant"], string> = {
     filled: "Button",
     tonal: "FilledTonalButton",
@@ -180,7 +204,7 @@ function emitButton(ctx: ScreenGenContext, node: NodeOfType<"Button">): string[]
     outlined: "OutlinedButton",
     text: "TextButton",
   };
-  const mod = buildModifierExpr(node.style);
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
   const fn = fnMap[node.props.variant];
   return [
     `${fn}(`,
@@ -199,8 +223,13 @@ function emitButton(ctx: ScreenGenContext, node: NodeOfType<"Button">): string[]
   ];
 }
 
-function emitInputControl(ctx: ScreenGenContext, node: ComponentNode): string[] {
-  const mod = buildModifierExpr(node.style);
+function emitInputControl(
+  ctx: ScreenGenContext,
+  node: ComponentNode,
+  scope: ChildScope,
+): string[] {
+  const modOpts = childModOpts(scope);
+  const mod = buildModifierExpr(node.style, modOpts);
   switch (node.type) {
     case "IconButton": {
       const fnMap: Record<NodeOfType<"IconButton">["props"]["variant"], string> = {
@@ -257,9 +286,17 @@ function emitInputControl(ctx: ScreenGenContext, node: ComponentNode): string[] 
     case "Switch": {
       const varName = nextStateVar(ctx, toCamelCase(node.props.label || "switchChecked"));
       ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(${node.props.checked ? "true" : "false"}) }`);
+      // Switch rows fill available width on the canvas (w-full + justify-between)
+      const switchStyle =
+        scope.parentKind !== "flowRow" && (!node.style.width || node.style.width === "wrap")
+          ? { ...node.style, width: "fill" as const }
+          : node.style;
+      const switchMod = buildModifierExpr(switchStyle, modOpts);
+      const textMod = scope.parentKind !== "flowRow" ? ", modifier = Modifier.weight(1f)" : "";
       return [
-        `Row(modifier = ${mod}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {`,
-        `    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.bodyLarge)`,
+        `Row(modifier = ${switchMod}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {`,
+        `    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.bodyLarge${textMod})`,
+        "    Spacer(Modifier.width(12.dp))",
         `    Switch(checked = ${varName}, onCheckedChange = { ${varName} = it })`,
         "}",
       ];
@@ -270,7 +307,7 @@ function emitInputControl(ctx: ScreenGenContext, node: ComponentNode): string[] 
       return [
         `Row(modifier = ${mod}, verticalAlignment = Alignment.CenterVertically) {`,
         `    Checkbox(checked = ${varName}, onCheckedChange = { ${varName} = it })`,
-        `    Spacer(Modifier.width(8.dp))`,
+        "    Spacer(Modifier.width(8.dp))",
         `    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.bodyMedium)`,
         "}",
       ];
@@ -321,15 +358,22 @@ function emitInputControl(ctx: ScreenGenContext, node: ComponentNode): string[] 
   }
 }
 
-function emitListItem(ctx: ScreenGenContext, node: NodeOfType<"ListItem">): string[] {
-  const mod = buildModifierExpr(node.style, {
-    extra:
-      node.action && node.action.type !== "none"
-        ? [`.clickable ${emitActionLambda(ctx, node)}`]
-        : undefined,
-  });
+function emitListItem(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"ListItem">,
+  scope: ChildScope,
+): string[] {
+  const mod = buildModifierExpr(
+    node.style,
+    childModOpts(scope, {
+      extra:
+        node.action && node.action.type !== "none"
+          ? [`.clickable ${emitActionLambda(ctx, node)}`]
+          : undefined,
+    }),
+  );
   const lines = [
-    `ListItem(`,
+    "ListItem(",
     `    modifier = ${mod},`,
     `    headlineContent = { Text(${kotlinString(node.props.headline)}) },`,
   ];
@@ -362,24 +406,40 @@ function emitListItem(ctx: ScreenGenContext, node: NodeOfType<"ListItem">): stri
   return lines;
 }
 
-function emitProgressOrLoader(ctx: ScreenGenContext, node: ComponentNode): string[] {
-  const mod = buildModifierExpr(node.style);
+function normalizeProgress(raw: number): number {
+  const frac = raw > 0 && raw < 1 ? raw : raw / 100;
+  return Math.min(1, Math.max(0, frac));
+}
+
+function emitProgressOrLoader(
+  ctx: ScreenGenContext,
+  node: ComponentNode,
+  scope: ChildScope,
+): string[] {
+  const modOpts = childModOpts(scope);
   if (node.type === "LoadingIndicator") {
+    const loaderMod = buildModifierExpr(node.style, {
+      ...modOpts,
+      extra: [`.size(${node.props.size}.dp)`],
+    });
     if (ctx.m3Expressive) {
       return node.props.contained
-        ? [`ContainedLoadingIndicator(modifier = Modifier.size(${node.props.size}.dp))`]
-        : [`LoadingIndicator(modifier = Modifier.size(${node.props.size}.dp))`];
+        ? [`ContainedLoadingIndicator(modifier = ${loaderMod})`]
+        : [`LoadingIndicator(modifier = ${loaderMod})`];
     }
     return [
       "// Hybrid Stable M3 fallback (enable M3 Expressive toggle for morphing loader)",
       node.props.contained
-        ? `Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(${node.props.size}.dp)) { Box(contentAlignment = Alignment.Center) { CircularProgressIndicator(modifier = Modifier.size(${Math.round(node.props.size * 0.55)}.dp)) } }`
-        : `CircularProgressIndicator(modifier = Modifier.size(${node.props.size}.dp))`,
+        ? `Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = ${loaderMod}) { Box(contentAlignment = Alignment.Center) { CircularProgressIndicator(modifier = Modifier.size(${Math.round(node.props.size * 0.55)}.dp)) } }`
+        : `CircularProgressIndicator(modifier = ${loaderMod})`,
     ];
   }
 
   if (node.type === "ProgressBar") {
-    const valArg = node.props.determinate ? `progress = { ${kotlinFloat(node.props.value)} }, ` : "";
+    const mod = buildModifierExpr(node.style, modOpts);
+    const valArg = node.props.determinate
+      ? `progress = { ${kotlinFloat(normalizeProgress(node.props.value))} }, `
+      : "";
     if (ctx.m3Expressive && node.props.wavy) {
       const fn = node.props.variant === "circular" ? "CircularWavyProgressIndicator" : "LinearWavyProgressIndicator";
       return [`${fn}(${valArg}modifier = ${mod})`];
@@ -391,9 +451,10 @@ function emitProgressOrLoader(ctx: ScreenGenContext, node: ComponentNode): strin
   return [];
 }
 
-function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
+function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): string[] {
   const node = ctx.screen.nodes[nodeId];
   if (!node) return [];
+  const modOpts = childModOpts(scope);
 
   switch (node.type) {
     case "TopAppBar":
@@ -402,10 +463,27 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
       return emitFab(ctx, node);
     case "Column": {
       const gap = node.props.connected ? Math.min(node.props.gap, 3) : node.props.gap;
+      const hasFiniteHeight = typeof node.style.height === "number";
+      const shouldScroll =
+        node.props.scrollable && (!scope.hasVerticalScrollAncestor || hasFiniteHeight);
+      if (node.props.scrollable && scope.hasVerticalScrollAncestor && !hasFiniteHeight) {
+        if (!ctx.reportedNestedScrollWarning) {
+          ctx.reportedNestedScrollWarning = true;
+          ctx.diagnostics.push({
+            severity: "info",
+            screenId: ctx.screen.id,
+            nodeId: node.id,
+            message: `Skipped nested verticalScroll() on Column in "${ctx.screen.name}" because the parent screen already scrolls vertically (set an explicit dp height to enable nested scrolling).`,
+          });
+        }
+      }
       const extra: string[] = [];
-      if (node.props.scrollable) extra.push(".verticalScroll(rememberScrollState())");
-      const mod = buildModifierExpr(node.style, { extra });
-      const children = emitColumnOrRowChildren(ctx, node);
+      if (shouldScroll) extra.push(".verticalScroll(rememberScrollState())");
+      const mod = buildModifierExpr(node.style, childModOpts(scope, { extra }));
+      const children = emitContainerChildren(ctx, node, {
+        parentKind: "column",
+        hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor || shouldScroll,
+      });
       return [
         ...(node.props.connected ? ["// Connected M3 group container"] : []),
         `Column(modifier = ${mod}, verticalArrangement = ${vArrExpr(node.props.verticalArrangement, gap)}, horizontalAlignment = ${hAlignExpr(node.props.horizontalAlignment)}) {`,
@@ -415,20 +493,44 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
     }
     case "Row": {
       const gap = node.props.connected ? Math.min(node.props.gap, 3) : node.props.gap;
-      const mod = buildModifierExpr(node.style);
-      const children = emitColumnOrRowChildren(ctx, node);
-      const fn = node.props.wrap ? "FlowRow" : "Row";
-      if (node.props.wrap) ctx.needsExperimentalLayout = true;
+      const effectiveStyle =
+        node.props.horizontalArrangement === "spaceBetween" &&
+        scope.parentKind !== "flowRow" &&
+        (!node.style.width || node.style.width === "wrap")
+          ? { ...node.style, width: "fill" as const }
+          : node.style;
+      const mod = buildModifierExpr(effectiveStyle, modOpts);
+      if (node.props.wrap) {
+        ctx.needsExperimentalLayout = true;
+        const children = emitContainerChildren(ctx, node, {
+          parentKind: "flowRow",
+          hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+          flowVerticalAlign: node.props.verticalAlignment,
+        });
+        return [
+          ...(node.props.connected ? ["// Connected M3 action group"] : []),
+          `FlowRow(modifier = ${mod}, horizontalArrangement = ${hArrExpr(node.props.horizontalArrangement, gap)}, verticalArrangement = Arrangement.spacedBy(${gap}.dp)) {`,
+          ...indentLines(children, 4),
+          "}",
+        ];
+      }
+      const children = emitContainerChildren(ctx, node, {
+        parentKind: "row",
+        hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+      });
       return [
         ...(node.props.connected ? ["// Connected M3 action group"] : []),
-        `${fn}(modifier = ${mod}, horizontalArrangement = ${hArrExpr(node.props.horizontalArrangement, gap)}, verticalAlignment = ${vAlignExpr(node.props.verticalAlignment)}) {`,
+        `Row(modifier = ${mod}, horizontalArrangement = ${hArrExpr(node.props.horizontalArrangement, gap)}, verticalAlignment = ${vAlignExpr(node.props.verticalAlignment)}) {`,
         ...indentLines(children, 4),
         "}",
       ];
     }
     case "Box": {
-      const mod = buildModifierExpr(node.style);
-      const children = emitColumnOrRowChildren(ctx, node);
+      const mod = buildModifierExpr(node.style, modOpts);
+      const children = emitContainerChildren(ctx, node, {
+        parentKind: "box",
+        hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+      });
       return [
         `Box(modifier = ${mod}, contentAlignment = ${boxAlignExpr(node.props.contentAlignment)}) {`,
         ...indentLines(children, 4),
@@ -442,7 +544,10 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
           : node.props.variant === "outlined"
             ? "OutlinedCard"
             : "Card";
-      const mod = buildModifierExpr({ ...node.style, padding: undefined }, { skipBackground: true });
+      const mod = buildModifierExpr(
+        { ...node.style, padding: undefined },
+        childModOpts(scope, { skipBackground: true }),
+      );
       const innerPad = node.style.padding;
       const padMod = innerPad
         ? `Modifier.padding(start = ${innerPad.left}.dp, top = ${innerPad.top}.dp, end = ${innerPad.right}.dp, bottom = ${innerPad.bottom}.dp)`
@@ -454,7 +559,10 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
       if (node.action && node.action.type !== "none") {
         args.push(`onClick = ${emitActionLambda(ctx, node)}`);
       }
-      const children = emitColumnOrRowChildren(ctx, node);
+      const children = emitContainerChildren(ctx, node, {
+        parentKind: "column",
+        hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+      });
       return [
         `${cardFn}(${args.join(", ")}) {`,
         `    Column(modifier = ${padMod}, verticalArrangement = Arrangement.spacedBy(${node.props.gap}.dp)) {`,
@@ -466,15 +574,20 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
     case "Text": {
       const alignMap = { left: "TextAlign.Start", center: "TextAlign.Center", right: "TextAlign.End" };
       const maxLinesArg = node.props.maxLines ? `, maxLines = ${node.props.maxLines}` : "";
-      const mod = buildModifierExpr(node.style);
+      const mod = buildModifierExpr(node.style, modOpts);
       return [
         `Text(text = ${kotlinString(node.props.text)}, modifier = ${mod}, style = MaterialTheme.typography.${node.props.role}, color = ${colorTokenExpr(node.props.colorToken)}, textAlign = ${alignMap[node.props.align]}${maxLinesArg})`,
       ];
     }
-    case "Icon":
+    case "Icon": {
+      const iconMod = buildModifierExpr(node.style, {
+        ...modOpts,
+        extra: [`.size(${node.props.size}.dp)`],
+      });
       return [
-        `Icon(${toMaterialIconRef(node.props.name)}, contentDescription = null, modifier = Modifier.size(${node.props.size}.dp), tint = ${colorTokenExpr(node.props.colorToken)})`,
+        `Icon(${toMaterialIconRef(node.props.name)}, contentDescription = null, modifier = ${iconMod}, tint = ${colorTokenExpr(node.props.colorToken)})`,
       ];
+    }
     case "Image": {
       const shapeMod =
         node.props.shape === "circle"
@@ -491,7 +604,8 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
               ? ".aspectRatio(1f)"
               : "";
       const mod = buildModifierExpr(node.style, {
-        extra: [ratio, shapeMod, `.background(MaterialTheme.colorScheme.surfaceVariant)`].filter(Boolean),
+        ...modOpts,
+        extra: [ratio, shapeMod, ".background(MaterialTheme.colorScheme.surfaceVariant)"].filter(Boolean),
       });
       return [
         `// Async image source: ${node.props.src} (wire Coil AsyncImage for network loading)`,
@@ -500,30 +614,40 @@ function emitNode(ctx: ScreenGenContext, nodeId: string): string[] {
         "}",
       ];
     }
-    case "Spacer":
-      return [`Spacer(modifier = Modifier.size(${node.props.size}.dp))`];
+    case "Spacer": {
+      const spacerMod = buildModifierExpr(node.style, {
+        ...modOpts,
+        extra: [`.size(${node.props.size}.dp)`],
+      });
+      return [`Spacer(modifier = ${spacerMod})`];
+    }
     case "Divider": {
-      const insetMod = node.props.inset ? "Modifier.padding(horizontal = 16.dp)" : "Modifier";
-      return [`HorizontalDivider(modifier = ${insetMod}, thickness = ${node.props.thickness}.dp)`];
+      const dividerMod = buildModifierExpr(node.style, {
+        ...modOpts,
+        extra: node.props.inset ? [".padding(horizontal = 16.dp)"] : undefined,
+      });
+      return [`HorizontalDivider(modifier = ${dividerMod}, thickness = ${node.props.thickness}.dp)`];
     }
     case "Badge": {
       const bg = colorTokenExpr(node.props.colorRole);
-      return [`Badge(containerColor = ${bg}) { Text(${kotlinString(node.props.label)}) }`];
+      const badgeMod = buildModifierExpr(node.style, modOpts);
+      const modArg = badgeMod === "Modifier" ? "" : `modifier = ${badgeMod}, `;
+      return [`Badge(${modArg}containerColor = ${bg}) { Text(${kotlinString(node.props.label)}) }`];
     }
     case "Button":
-      return emitButton(ctx, node);
+      return emitButton(ctx, node, scope);
     case "IconButton":
     case "TextField":
     case "Switch":
     case "Checkbox":
     case "Slider":
     case "Chip":
-      return emitInputControl(ctx, node);
+      return emitInputControl(ctx, node, scope);
     case "ListItem":
-      return emitListItem(ctx, node);
+      return emitListItem(ctx, node, scope);
     case "LoadingIndicator":
     case "ProgressBar":
-      return emitProgressOrLoader(ctx, node);
+      return emitProgressOrLoader(ctx, node, scope);
   }
 }
 
@@ -544,12 +668,18 @@ export function generateScreenFile(
     stateCounter: {},
     diagnostics,
     needsExperimentalLayout: false,
+    reportedNestedScrollWarning: false,
   };
 
   const bodyNode = screen.nodes[screen.slots.bodyId];
-  const bodyChildren = bodyNode ? emitColumnOrRowChildren(ctx, bodyNode) : [];
-  const topBarLines = screen.slots.topBarId ? emitNode(ctx, screen.slots.topBarId) : [];
-  const fabLines = screen.slots.fabId ? emitNode(ctx, screen.slots.fabId) : [];
+  const rootScope: ChildScope = { parentKind: "column", hasVerticalScrollAncestor: true };
+  const bodyChildren = bodyNode ? emitContainerChildren(ctx, bodyNode, rootScope) : [];
+  const topBarLines = screen.slots.topBarId
+    ? emitNode(ctx, screen.slots.topBarId, { parentKind: "box", hasVerticalScrollAncestor: false })
+    : [];
+  const fabLines = screen.slots.fabId
+    ? emitNode(ctx, screen.slots.fabId, { parentKind: "box", hasVerticalScrollAncestor: false })
+    : [];
 
   const bodyGap = bodyNode?.type === "Column" ? bodyNode.props.gap : 12;
   const bodyBg = screen.backgroundToken
@@ -573,6 +703,7 @@ export function generateScreenFile(
     "import androidx.compose.foundation.shape.RoundedCornerShape",
     "import androidx.compose.foundation.verticalScroll",
     "import androidx.compose.material.icons.Icons",
+    "import androidx.compose.material.icons.automirrored.rounded.*",
     "import androidx.compose.material.icons.rounded.*",
     "import androidx.compose.material3.*",
     "import androidx.compose.runtime.*",
@@ -606,8 +737,8 @@ export function generateScreenFile(
     "        bottomBar = bottomBar,",
     "        snackbarHost = snackbarHost,",
     "    ) { innerPadding ->",
-    `        Column(`,
-    `            modifier = Modifier`,
+    "        Column(",
+    "            modifier = Modifier",
     "                .fillMaxSize()",
     "                .padding(innerPadding)",
     ...(bodyBg ? [`                ${bodyBg}`] : []),

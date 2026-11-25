@@ -129,7 +129,7 @@ describe("Phase 6: Kotlin + Jetpack Compose AST Compiler", () => {
         };
       }
       if (type === "ProgressBar") {
-        node.props = { variant: "linear", determinate: true, value: 0.65, wavy: true };
+        node.props = { variant: "linear", determinate: true, value: 65, wavy: true };
       }
       if (type === "Row") {
         node.props = {
@@ -162,7 +162,15 @@ describe("Phase 6: Kotlin + Jetpack Compose AST Compiler", () => {
     assert.ok(!stableScreen.includes("ExperimentalMaterial3ExpressiveApi"));
     assert.ok(!stableScreen.includes("LinearWavyProgressIndicator"));
     assert.match(stableScreen, /Icons\.Rounded\.RocketLaunch/);
+    assert.match(stableScreen, /progress = \{ 0\.65f \}/);
     assert.match(stableScreen, /uriHandler\.openUri\(/);
+
+    // Nested scrollable Column inside body must NOT emit duplicate .verticalScroll() without explicit height
+    assert.equal(
+      (stableScreen.match(/\.verticalScroll\(rememberScrollState\(\)\)/g) ?? []).length,
+      1,
+      "Expected only root Scaffold body Column to have verticalScroll",
+    );
 
     // 2. M3 Expressive Alpha Opt-in
     const m3eResult = generateComposeProject(base, { m3Expressive: true });
@@ -173,6 +181,39 @@ describe("Phase 6: Kotlin + Jetpack Compose AST Compiler", () => {
     assert.match(m3eScreen, /LoadingIndicator\(/);
     assert.match(m3eScreen, /LinearWavyProgressIndicator\(/);
     assert.match(m3eTheme, /MaterialExpressiveTheme|MotionScheme\.expressive/);
+  });
+
+  it("emits Android-compilable FlowRow, Row weights, SpaceBetween Switch, normalized progress, and AutoMirrored icons", () => {
+    const showcase = STARTER_TEMPLATES[0].build();
+    const result = generateComposeProject(showcase);
+
+    const homeKt = result.files.find((f) => f.shortName === "HomeScreen.kt")!.content;
+    const exploreKt = result.files.find((f) => f.shortName === "ExploreScreen.kt")!.content;
+    const settingsKt = result.files.find((f) => f.shortName === "SettingsScreen.kt")!.content;
+
+    // 1. FlowRow must not use verticalAlignment; uses verticalArrangement + child Modifier.align
+    assert.doesNotMatch(exploreKt, /FlowRow\([^\n]*verticalAlignment\s*=/, "FlowRow must not receive verticalAlignment");
+    assert.match(exploreKt, /FlowRow\([^\n]*verticalArrangement = Arrangement\.spacedBy\(8\.dp\)/);
+    assert.match(exploreKt, /Modifier\.align\(Alignment\.CenterVertically\)/);
+
+    // 2. ProgressBar 72% normalizes cleanly to 0.72f
+    assert.match(exploreKt, /LinearProgressIndicator\(progress = \{ 0\.72f \}/);
+
+    // 3. Multi-child Row fill children use .weight(1f) instead of .fillMaxWidth()
+    assert.match(homeKt, /Button\([\s\S]*?modifier = Modifier\.weight\(1f\)/);
+    assert.match(homeKt, /FilledTonalButton\([\s\S]*?modifier = Modifier\.weight\(1f\)/);
+    assert.match(exploreKt, /Column\(modifier = Modifier\.weight\(1f\)/);
+
+    // 4. Settings ArrowBack uses AutoMirrored icon without deprecation warning
+    assert.match(settingsKt, /androidx\.compose\.material\.icons\.automirrored\.rounded\.\*/);
+    assert.match(settingsKt, /Icons\.AutoMirrored\.Rounded\.ArrowBack/);
+    assert.ok(!settingsKt.includes("Icons.Rounded.ArrowBack"));
+
+    // 5. Switch row includes fillMaxWidth so SpaceBetween separates label & switch
+    const blank = STARTER_TEMPLATES[3].build();
+    blank.screens[0] = insertNode(blank.screens[0], blank.screens[0].slots.bodyId, createNode("Switch"));
+    const switchKt = generateComposeProject(blank).files.find((f) => f.category === "screen")!.content;
+    assert.match(switchKt, /Row\(modifier = Modifier\.fillMaxWidth\(\), verticalAlignment = Alignment\.CenterVertically, horizontalArrangement = Arrangement\.SpaceBetween\)/);
   });
 
   it("reports diagnostic warnings for broken navigation targets without failing codegen", () => {

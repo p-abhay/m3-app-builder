@@ -155,6 +155,19 @@ export function colorTokenExpr(token?: ColorTokenKey | "transparent"): string {
   return COLOR_TOKEN_TO_SCHEME[token] ?? "MaterialTheme.colorScheme.onSurface";
 }
 
+const AUTO_MIRRORED_ICONS: Record<string, string> = {
+  arrow_back: "ArrowBack",
+  arrow_forward: "ArrowForward",
+  send: "Send",
+  help: "Help",
+  open_in_new: "OpenInNew",
+  reply: "Reply",
+  logout: "Logout",
+  login: "Login",
+  undo: "Undo",
+  redo: "Redo",
+};
+
 const ICON_ALIASES: Record<string, string> = {
   lock_person: "Lock",
   palette: "Palette",
@@ -162,8 +175,6 @@ const ICON_ALIASES: Record<string, string> = {
   rocket_launch: "RocketLaunch",
   notifications_active: "NotificationsActive",
   chevron_right: "ChevronRight",
-  arrow_back: "ArrowBack",
-  arrow_forward: "ArrowForward",
   more_vert: "MoreVert",
   more_horiz: "MoreHoriz",
   brightness_6: "Brightness6",
@@ -186,19 +197,41 @@ const ICON_ALIASES: Record<string, string> = {
   favorite: "Favorite",
 };
 
-/** Map a Material Symbols snake_case icon name to `Icons.Rounded.<IconName>`. */
+/** Map a Material Symbols snake_case icon name to `Icons.Rounded.*` or `Icons.AutoMirrored.Rounded.*`. */
 export function toMaterialIconRef(iconName?: string): string {
   const cleaned = (iconName || "star").trim();
+  if (AUTO_MIRRORED_ICONS[cleaned]) {
+    return `Icons.AutoMirrored.Rounded.${AUTO_MIRRORED_ICONS[cleaned]}`;
+  }
   const mapped = ICON_ALIASES[cleaned] ?? toPascalCase(cleaned, "Star");
   return `Icons.Rounded.${mapped}`;
 }
 
-/** Build a clean Compose `Modifier` chain from `ComponentStyle` and optional container helpers. */
+export interface ModifierOptions {
+  skipBackground?: boolean;
+  extra?: string[];
+  /** True when inside a non-wrapping `RowScope` (`width: "fill"` maps to `.weight(1f)`). */
+  inRowScope?: boolean;
+  /** Vertical alignment applied inside `FlowRowScope` (`Modifier.align(...)`). */
+  alignInFlowRow?: "top" | "center" | "bottom";
+}
+
+/** Build a clean Compose `Modifier` chain from `ComponentStyle` and container scope rules. */
 export function buildModifierExpr(
   style: ComponentStyle,
-  options: { skipBackground?: boolean; extra?: string[] } = {},
+  options: ModifierOptions = {},
 ): string {
   const parts: string[] = [];
+
+  if (options.inRowScope && style.width === "fill") {
+    parts.push(".weight(1f)");
+  }
+
+  if (options.alignInFlowRow === "center") {
+    parts.push(".align(Alignment.CenterVertically)");
+  } else if (options.alignInFlowRow === "bottom") {
+    parts.push(".align(Alignment.Bottom)");
+  }
 
   if (style.margin) {
     const { top, right, bottom, left } = style.margin;
@@ -207,7 +240,7 @@ export function buildModifierExpr(
     }
   }
 
-  if (style.width === "fill") parts.push(".fillMaxWidth()");
+  if (!options.inRowScope && style.width === "fill") parts.push(".fillMaxWidth()");
   else if (typeof style.width === "number") parts.push(`.width(${style.width}.dp)`);
 
   if (style.height === "fill") parts.push(".fillMaxHeight()");
