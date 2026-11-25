@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useM3Theme } from "@/theme/ThemeContext";
+import { APP_MILESTONE_LABEL } from "@/version";
 import { Icon } from "./Icon";
 
 interface ReleaseNotesModalProps {
@@ -14,88 +15,126 @@ interface FeatureItem {
   points: string[];
 }
 
-const V1_RELEASE_NOTES: FeatureItem[] = [
+interface ReleaseGroup {
+  id: "v2" | "v1";
+  heading: string;
+  version: string;
+  subtitle: string;
+  isCurrent?: boolean;
+  items: FeatureItem[];
+}
+
+const RELEASE_GROUPS: ReleaseGroup[] = [
   {
-    title: "Material 3 Expressive Theme & System Engine",
-    icon: "palette",
-    tag: "V1 Core",
-    points: [
-      "Gamut-safe seed color palette generator with 7 presets, Light/Dark/System modes, and Standard/Medium/High contrast.",
-      "Material You Dynamic Color wallpaper simulation and per-role hex fine-tuning.",
-      "Display & Body Google Font pairing, emphasized type weights, system font scaling (85%–130%), shape scales (Square/Rounded/Full), layout density, motion physics, and Android system bars.",
+    id: "v2",
+    heading: "V2",
+    version: APP_MILESTONE_LABEL,
+    subtitle: "Kotlin + Jetpack Compose Export & Android Studio Gradle Project",
+    isCurrent: true,
+    items: [
+      {
+        title: "Kotlin + Jetpack Compose AST Compiler",
+        icon: "code",
+        tag: "Phase 6",
+        points: [
+          "Compiles multi-screen ASTs, Scaffold slots (TopAppBar, Body, FAB, NavigationBar), and all 22 M3 components into idiomatic @Composable screens and AppNavHost.kt.",
+          "Generates Color.kt, Type.kt, Shape.kt, and Theme.kt mapped 1-to-1 from seed palettes, custom color overrides, contrast level, fonts, and dynamic color rules.",
+          "Hybrid Stable Material 3 mode emits compile-ready Compose BOM APIs by default with a one-click M3 Expressive Alpha APIs toggle (LoadingIndicator, wavy progress bars, MaterialExpressiveTheme).",
+        ],
+      },
+      {
+        title: "Android Studio Gradle Project .zip Export",
+        icon: "folder_zip",
+        tag: "Phase 7",
+        points: [
+          "Packages complete Android Studio projects (settings.gradle.kts, build.gradle.kts, gradle/libs.versions.toml, app/build.gradle.kts, AndroidManifest.xml, and XML resources) using an in-browser PKZIP builder.",
+          "Live editable Android Package Name, minSdk, and targetSdk persisted with Undo/Redo and local storage auto-save.",
+          "Categorized file explorer with horizontal code scrolling, single-file Copy, Download File, and full .zip package download.",
+        ],
+      },
     ],
   },
   {
-    title: "Normalized Android AST & Project Studio",
-    icon: "account_tree",
-    tag: "Schema v1",
-    points: [
-      "Android Scaffold slots (TopAppBar, Body, FAB, and Shared Bottom Navigation) backed by an O(1) normalized node map.",
-      "4 curated starter templates (Material Showcase, Android Settings, Auth Flow, Blank App).",
-      "50-step Undo/Redo (Ctrl+Z / Ctrl+Shift+Z), localStorage auto-save, and validated JSON import/export.",
-    ],
-  },
-  {
-    title: "Visual Drag-and-Drop & 22 M3 Components",
-    icon: "widgets",
-    tag: "Editor",
-    points: [
-      "Categorized, searchable Parts Palette with click-to-insert and slot-aware drag-and-drop into TopAppBar, FAB, Body, and nested Cards.",
-      "Sortable AST Tree / Layers panel with bidirectional selection and M3E connected button/list groups.",
-      "Offline-ready Material Symbols Icon Picker, full component Properties Inspector, and Phone/Tablet viewport switcher.",
-    ],
-  },
-  {
-    title: "Isolated Interactive Preview",
-    icon: "play_arrow",
-    tag: "Simulator",
-    points: [
-      "Live TextField typing, Switch/Checkbox/Chip/IconButton toggling, Slider scrubbing, and ListItem actions without mutating your AST.",
-      "Multi-screen navigation stack with M3 slide/fade/expand transitions, back navigation, Shared BottomNav routing, and Material 3 Snackbar.",
+    id: "v1",
+    heading: "V1",
+    version: "v0.1.0",
+    subtitle: "Visual Android Studio, M3E Theming & Interactive Preview",
+    items: [
+      {
+        title: "Material 3 Expressive Theme & System Engine",
+        icon: "palette",
+        tag: "Phase 1",
+        points: [
+          "Gamut-safe seed color palette generator with 7 presets, Light/Dark/System modes, and Standard/Medium/High contrast.",
+          "Material You Dynamic Color wallpaper simulation and per-role hex fine-tuning.",
+          "Display & Body Google Font pairing, emphasized type weights, system font scaling (85%–130%), shape scales (Square/Rounded/Full), layout density, motion physics, and Android system bars.",
+        ],
+      },
+      {
+        title: "Normalized Android AST & Project Studio",
+        icon: "account_tree",
+        tag: "Phase 2",
+        points: [
+          "Android Scaffold slots (TopAppBar, Body, FAB, and Shared Bottom Navigation) backed by an O(1) normalized node map.",
+          "4 curated starter templates (Material Showcase, Android Settings, Auth Flow, Blank App).",
+          "50-step Undo/Redo (Ctrl+Z / Ctrl+Shift+Z), localStorage auto-save, and validated JSON import/export.",
+        ],
+      },
+      {
+        title: "Visual Drag-and-Drop & 22 M3 Components",
+        icon: "widgets",
+        tag: "Phases 3–4",
+        points: [
+          "Categorized, searchable Parts Palette with click-to-insert and slot-aware drag-and-drop into TopAppBar, FAB, Body, and nested Cards.",
+          "Sortable AST Tree / Layers panel with bidirectional selection and M3E connected button/list groups.",
+          "Offline-ready Material Symbols Icon Picker, full component Properties Inspector, and Phone/Tablet viewport switcher.",
+        ],
+      },
+      {
+        title: "Isolated Interactive Preview",
+        icon: "play_arrow",
+        tag: "Phase 5",
+        points: [
+          "Live TextField typing, Switch/Checkbox/Chip/IconButton toggling, Slider scrubbing, and ListItem actions without mutating your AST.",
+          "Multi-screen navigation stack with M3 slide/fade/expand transitions, back navigation, Shared BottomNav routing, and Material 3 Snackbar.",
+        ],
+      },
     ],
   },
 ];
 
 const FUTURE_ROADMAP: FeatureItem[] = [
   {
-    title: "Kotlin + Jetpack Compose Code Generator",
-    icon: "code",
-    tag: "V2 • Next",
-    points: [
-      "Compile the normalized AST directly into idiomatic Jetpack Compose (.kt) files: Color.kt, Theme.kt, Type.kt, Shape.kt, screen composables, and AppNavHost.kt.",
-      "One-click export as a ready-to-open Android Studio Gradle project zip.",
-    ],
-  },
-  {
-    title: "AI Screen Co-Pilot & Vibe-Coding Prompts",
-    icon: "auto_awesome",
-    tag: "V2",
-    points: [
-      "Describe screens in natural language to scaffold M3 AST layouts, or export structured design specs for coding agents.",
-    ],
-  },
-  {
-    title: "State Variables & Mock Data Binding",
+    title: "State Variables, JSON Data Binding & LazyColumn Repeaters",
     icon: "data_object",
-    tag: "V2",
+    tag: "v0.3.0 • Next",
     points: [
-      "Bind ListItems, Cards, and Text nodes to JSON datasets, LazyColumn repeaters, and conditional visibility rules.",
+      "Define app and screen variables to bind Text, ListItems, Switches, and conditional visibility rules in Preview and compiled remember { mutableStateOf(...) } Kotlin.",
+      "Bind Card and ListItem templates to mock JSON arrays compiling to Jetpack Compose LazyColumn items(...).",
+    ],
+  },
+  {
+    title: "AI Screen Co-Pilot & Design Spec Bridge",
+    icon: "auto_awesome",
+    tag: "v0.3.0 • Next",
+    points: [
+      "One-click Copy AI Spec exporting compact AST/token contracts for coding agents, plus validated AST patch import with Undo.",
     ],
   },
   {
     title: "Adaptive Navigation Rail, Bottom Sheets & Dialogs",
     icon: "tablet_android",
-    tag: "V3",
+    tag: "v0.4.0",
     points: [
       "Automatic NavigationBar → NavigationRail adaptation on Tablet viewports, plus ModalBottomSheet and AlertDialog overlays.",
     ],
   },
   {
-    title: "Cloud APK Preview & GitHub Sync",
+    title: "Cloud APK Preview & Production GA",
     icon: "cloud_upload",
-    tag: "V3",
+    tag: "v1.0.0 Target",
     points: [
-      "Push generated Kotlin Compose projects straight to GitHub and trigger cloud builds for instant Android APK testing.",
+      "Push generated Kotlin Compose projects straight to GitHub, trigger cloud APK builds, and finalize 1.0 production stability.",
     ],
   },
 ];
@@ -106,7 +145,56 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
 
   if (!open) return null;
 
-  const items = tab === "release" ? V1_RELEASE_NOTES : FUTURE_ROADMAP;
+  const renderCard = (section: FeatureItem, accent: "primary" | "tertiary") => (
+    <div
+      key={section.title}
+      className="p-4 border space-y-2"
+      style={{
+        backgroundColor: palette.surfaceContainer,
+        borderColor: palette.outlineVariant,
+        borderRadius: shapes.large,
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className="w-8 h-8 shrink-0 flex items-center justify-center"
+            style={{
+              borderRadius: shapes.small,
+              backgroundColor:
+                accent === "primary" ? palette.primaryContainer : palette.tertiaryContainer,
+              color:
+                accent === "primary" ? palette.onPrimaryContainer : palette.onTertiaryContainer,
+            }}
+          >
+            <Icon name={section.icon} size={17} />
+          </div>
+          <h4 className="text-sm font-semibold truncate">{section.title}</h4>
+        </div>
+        {section.tag && (
+          <span
+            className="text-[10px] font-bold px-2.5 py-0.5 shrink-0"
+            style={{
+              borderRadius: shapes.full,
+              backgroundColor: palette.surfaceContainerHighest,
+              color: palette.onSurfaceVariant,
+            }}
+          >
+            {section.tag}
+          </span>
+        )}
+      </div>
+
+      <ul
+        className="space-y-1.5 pl-4 text-xs leading-relaxed list-disc"
+        style={{ color: palette.onSurfaceVariant }}
+      >
+        {section.points.map((pt) => (
+          <li key={pt}>{pt}</li>
+        ))}
+      </ul>
+    </div>
+  );
 
   return (
     <div
@@ -152,11 +240,11 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
                     color: palette.onSecondaryContainer,
                   }}
                 >
-                  v1.0
+                  {APP_MILESTONE_LABEL}
                 </span>
               </div>
               <p className="text-xs truncate" style={{ color: palette.onSurfaceVariant }}>
-                No-Code Material 3 Expressive Android Studio
+                Pre-1.0 SemVer • No-Code Material 3 Expressive Android Studio
               </p>
             </div>
           </div>
@@ -212,59 +300,44 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
         </div>
 
         {/* Scrollable Content */}
-        <div className="no-scrollbar flex-1 overflow-y-auto p-5 pt-3 space-y-3">
-          {items.map((section) => (
-            <div
-              key={section.title}
-              className="p-4 border space-y-2"
-              style={{
-                backgroundColor: palette.surfaceContainer,
-                borderColor: palette.outlineVariant,
-                borderRadius: shapes.large,
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div
-                    className="w-8 h-8 shrink-0 flex items-center justify-center"
-                    style={{
-                      borderRadius: shapes.small,
-                      backgroundColor:
-                        tab === "release" ? palette.primaryContainer : palette.tertiaryContainer,
-                      color:
-                        tab === "release"
-                          ? palette.onPrimaryContainer
-                          : palette.onTertiaryContainer,
-                    }}
-                  >
-                    <Icon name={section.icon} size={17} />
+        <div className="no-scrollbar flex-1 overflow-y-auto p-5 pt-3 space-y-5">
+          {tab === "release"
+            ? RELEASE_GROUPS.map((group) => (
+                <section
+                  key={group.id}
+                  data-testid={`release-group-${group.id}`}
+                  className="space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h3 className="text-sm font-bold tracking-tight">{group.heading}</h3>
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5"
+                        style={{
+                          borderRadius: shapes.full,
+                          backgroundColor: group.isCurrent
+                            ? palette.primaryContainer
+                            : palette.surfaceContainerHighest,
+                          color: group.isCurrent
+                            ? palette.onPrimaryContainer
+                            : palette.onSurfaceVariant,
+                        }}
+                      >
+                        {group.version}
+                        {group.isCurrent ? " • Current" : ""}
+                      </span>
+                    </div>
+                    <span className="text-[11px] truncate" style={{ color: palette.onSurfaceVariant }}>
+                      {group.subtitle}
+                    </span>
                   </div>
-                  <h3 className="text-sm font-semibold truncate">{section.title}</h3>
-                </div>
-                {section.tag && (
-                  <span
-                    className="text-[10px] font-bold px-2.5 py-0.5 shrink-0"
-                    style={{
-                      borderRadius: shapes.full,
-                      backgroundColor: palette.surfaceContainerHighest,
-                      color: palette.onSurfaceVariant,
-                    }}
-                  >
-                    {section.tag}
-                  </span>
-                )}
-              </div>
 
-              <ul
-                className="space-y-1.5 pl-4 text-xs leading-relaxed list-disc"
-                style={{ color: palette.onSurfaceVariant }}
-              >
-                {section.points.map((pt) => (
-                  <li key={pt}>{pt}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
+                  <div className="space-y-2.5">
+                    {group.items.map((item) => renderCard(item, "primary"))}
+                  </div>
+                </section>
+              ))
+            : FUTURE_ROADMAP.map((item) => renderCard(item, "tertiary"))}
         </div>
       </div>
     </div>

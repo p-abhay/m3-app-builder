@@ -1,8 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { STARTER_TEMPLATES } from "../src/ast/templates.ts";
 import { generateGradleProject } from "../src/codegen/gradle/index.ts";
 import { crc32, createZipArchive } from "../src/codegen/zip.ts";
+import { APP_VERSION } from "../src/version.ts";
 
 interface ParsedZipEntry {
   path: string;
@@ -155,5 +157,13 @@ describe("Phase 7: ZIP Archiver & Android Studio Gradle Exporter", () => {
       .files.find((f) => f.path === "gradle/libs.versions.toml")!.content;
     assert.match(alphaToml, /material3Alpha = "1\.4\./);
     assert.match(alphaToml, /version\.ref = "material3Alpha"/);
+  });
+
+  it("keeps APP_VERSION synchronized with package.json SemVer release", () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+    assert.equal(APP_VERSION, pkg.version);
+    assert.match(APP_VERSION, /^0\.2\./);
   });
 });
