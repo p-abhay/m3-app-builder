@@ -13,6 +13,18 @@ test.describe("Phase 7: Android Studio Gradle Project .zip Export & Package Conf
     const modal = page.getByTestId("compose-export-modal");
     await expect(modal).toBeVisible();
 
+    await expect(modal.getByTestId("kotlin-code-viewer")).toBeVisible();
+
+    // Regression: long lines in Screen.kt must not push Copy / Download buttons outside modal bounds
+    await modal.getByTestId("kotlin-file-HomeScreen.kt").click();
+    const modalBox = await modal.boundingBox();
+    const downloadBox = await modal.getByTestId("download-single-file").boundingBox();
+    const copyBox = await modal.getByTestId("copy-kotlin-file").boundingBox();
+    expect(modalBox && downloadBox && copyBox).toBeTruthy();
+    expect(downloadBox!.x + downloadBox!.width).toBeLessThanOrEqual(modalBox!.x + modalBox!.width);
+    expect(copyBox!.x + copyBox!.width).toBeLessThanOrEqual(modalBox!.x + modalBox!.width);
+    expect(downloadBox!.x).toBeGreaterThanOrEqual(modalBox!.x);
+
     for (const key of [
       "settings.gradle.kts",
       "app/build.gradle.kts",

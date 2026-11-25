@@ -308,7 +308,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
         )}
 
         {/* Split Explorer + Code Viewer */}
-        <div className="flex-1 min-h-0 grid grid-cols-[260px_1fr]">
+        <div className="flex-1 min-h-0 min-w-0 grid grid-cols-[260px_minmax(0,1fr)]">
           {/* Left File Tree */}
           <aside
             className="no-scrollbar overflow-y-auto border-r p-3 space-y-4"
@@ -361,20 +361,21 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
           </aside>
 
           {/* Right Source Code Pane */}
-          <section className="flex flex-col min-h-0">
+          <section className="flex flex-col min-h-0 min-w-0 overflow-hidden">
             <div
-              className="px-4 py-2 border-b flex items-center justify-between gap-3 shrink-0"
+              className="px-4 py-2 border-b flex items-center justify-between gap-3 shrink-0 min-w-0"
               style={{
                 borderColor: palette.outlineVariant,
                 backgroundColor: palette.surfaceContainer,
               }}
             >
-              <span className="text-xs font-mono truncate" style={{ color: palette.onSurfaceVariant }}>
+              <span className="text-xs font-mono truncate min-w-0 flex-1" style={{ color: palette.onSurfaceVariant }}>
                 {activeFile?.path}
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
+                  data-testid="download-single-file"
                   onClick={handleDownloadFile}
                   className="m3-press flex items-center gap-1.5 px-3 py-1 text-xs font-semibold border-0 cursor-pointer"
                   style={{
@@ -404,12 +405,12 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
             </div>
 
             <div
-              className="no-scrollbar flex-1 min-h-0 overflow-auto p-4"
+              className="no-scrollbar flex-1 min-h-0 min-w-0 overflow-auto p-4"
               style={{ backgroundColor: palette.surfaceContainerLowest }}
             >
               <pre
                 data-testid="kotlin-code-viewer"
-                className="m-0 font-mono text-xs leading-relaxed"
+                className="m-0 font-mono text-xs leading-relaxed w-max min-w-full"
                 style={{ color: palette.onSurface }}
               >
                 {codeLines.map((line, idx) => (
