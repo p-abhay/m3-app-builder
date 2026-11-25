@@ -81,6 +81,7 @@ export interface ProjectStoreState {
   undo: () => void;
   redo: () => void;
   setProjectName: (name: string) => void;
+  setPackageName: (packageName: string) => void;
   loadTemplate: (templateId: string) => void;
   importProjectJson: (raw: string) => { ok: true } | { ok: false; error: string };
   exportProjectJson: () => string;
@@ -199,6 +200,9 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
 
   setProjectName: (name) =>
     get().commit((proj) => ({ ...proj, name })),
+
+  setPackageName: (packageName) =>
+    get().commit((proj) => ({ ...proj, packageName })),
 
   loadTemplate: (templateId) => {
     const tpl = STARTER_TEMPLATES.find((t) => t.id === templateId);
