@@ -206,48 +206,55 @@ export function LeftSidebar() {
   return (
     <div
       data-testid="left-sidebar"
-      className="flex flex-col h-full border-r"
+      className="flex flex-row h-full border-r min-h-0"
       style={{
         backgroundColor: palette.surfaceContainerLow,
         borderColor: palette.outlineVariant,
         color: palette.onSurface,
       }}
     >
-      {/* Top Tab Bar */}
-      <div className="p-2 border-b" style={{ borderColor: palette.outlineVariant }}>
-        <div
-          className="grid grid-cols-5 p-1 gap-0.5"
-          style={{ backgroundColor: palette.surfaceContainerHigh, borderRadius: shapes.full }}
-        >
-          {(
-            [
-              { key: "parts", label: "Parts", icon: "widgets" },
-              { key: "screens", label: "Screens", icon: "smartphone" },
-              { key: "data", label: "Data", icon: "database" },
-              { key: "tree", label: "AST Tree", icon: "account_tree" },
-              { key: "tokens", label: "Tokens", icon: "data_object" },
-            ] as const
-          ).map((item) => {
-            const active = tab === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setTab(item.key)}
-                className="m3-press flex items-center justify-center gap-1 py-1.5 px-1 text-[11px] font-semibold border-0 cursor-pointer"
-                style={{
-                  borderRadius: shapes.full,
-                  backgroundColor: active ? palette.secondaryContainer : "transparent",
-                  color: active ? palette.onSecondaryContainer : palette.onSurfaceVariant,
-                }}
-              >
-                <Icon name={item.icon} size={14} fill={active} />
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Left Navigation Rail (prevents horizontal tab label truncation) */}
+      <nav
+        aria-label="Workspace sections"
+        className="w-[74px] shrink-0 border-r py-2.5 px-1.5 flex flex-col gap-1.5"
+        style={{
+          backgroundColor: palette.surfaceContainer,
+          borderColor: palette.outlineVariant,
+        }}
+      >
+        {(
+          [
+            { key: "parts", label: "Parts", icon: "widgets" },
+            { key: "screens", label: "Screens", icon: "smartphone" },
+            { key: "data", label: "Data", icon: "database" },
+            { key: "tree", label: "AST Tree", icon: "account_tree" },
+            { key: "tokens", label: "Tokens", icon: "data_object" },
+          ] as const
+        ).map((item) => {
+          const active = tab === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              data-testid={`left-tab-${item.key}`}
+              onClick={() => setTab(item.key)}
+              title={item.label}
+              className="m3-press flex flex-col items-center justify-center gap-1 py-2 px-1 w-full text-[11px] font-semibold leading-tight border-0 cursor-pointer"
+              style={{
+                borderRadius: shapes.large,
+                backgroundColor: active ? palette.secondaryContainer : "transparent",
+                color: active ? palette.onSecondaryContainer : palette.onSurfaceVariant,
+              }}
+            >
+              <Icon name={item.icon} size={18} fill={active} />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Active Workspace Pane */}
+      <div className="flex-1 min-w-0 h-full flex flex-col min-h-0">
 
       {tab === "parts" && (
         <div className="flex-1 min-h-0">
@@ -551,6 +558,7 @@ export function LeftSidebar() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

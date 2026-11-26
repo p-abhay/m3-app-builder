@@ -55,6 +55,14 @@ function getWidthStyle(node: ComponentNode): CSSProperties {
   return {};
 }
 
+function getAlignSelfStyle(node: ComponentNode): CSSProperties {
+  const align = node.style.alignSelf;
+  if (!align || align === "auto") return {};
+  if (align === "stretch") return { alignSelf: "stretch" };
+  const map = { start: "flex-start", center: "center", end: "flex-end" } as const;
+  return { alignSelf: map[align] };
+}
+
 function resolveBg(
   token: ColorTokenKey | "transparent" | undefined,
   palette: M3Palette,
@@ -287,6 +295,13 @@ export function M3NodeRenderer({
             backgroundColor: `${palette.primaryContainer}28`,
           }
         : {};
+
+  const alignSelfStyle = !isBodyRoot ? getAlignSelfStyle(node) : {};
+  const nodeFrameStyle: CSSProperties = {
+    ...alignSelfStyle,
+    ...dndTransformStyle,
+    ...selectionRingStyle,
+  };
 
   const isNativeButton =
     node.type === "Button" ||
@@ -531,8 +546,7 @@ export function M3NodeRenderer({
             width: node.style.width === "fill" ? "100%" : undefined,
             backgroundColor: resolveBg(node.style.backgroundToken, palette),
             borderRadius: node.style.cornerRadius,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           {node.childIds.length === 0 && isBodyRoot && !isPreview ? (
@@ -599,8 +613,7 @@ export function M3NodeRenderer({
             margin: getMarginCss(node),
             backgroundColor: resolveBg(node.style.backgroundToken, palette),
             borderRadius: node.style.cornerRadius,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <SortableContext
@@ -645,8 +658,7 @@ export function M3NodeRenderer({
             backgroundColor: resolveBg(node.style.backgroundToken, palette),
             borderRadius: node.style.cornerRadius ?? shapes.medium,
             ...map[align],
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <SortableContext
@@ -693,8 +705,7 @@ export function M3NodeRenderer({
             borderRadius: renderConnectedRadius(
               node.style.cornerRadius ?? shapes.large,
             ),
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <SortableContext
@@ -722,8 +733,7 @@ export function M3NodeRenderer({
             color: palette[colorToken] ?? palette.onSurface,
             textAlign: align,
             width: node.style.width === "fill" ? "100%" : undefined,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           {resolveStr(text)}
@@ -739,7 +749,7 @@ export function M3NodeRenderer({
           {...commonAttrs}
           onClick={handleNodeClick}
           className={`inline-flex items-center justify-center shrink-0 ${!isPreview || node.action ? "cursor-pointer" : ""}`}
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          style={nodeFrameStyle}
         >
           <Icon name={name} size={size} fill={fill} color={palette[colorToken]} />
         </span>
@@ -760,14 +770,14 @@ export function M3NodeRenderer({
           ref={setMergedRef}
           {...commonAttrs}
           onClick={handleNodeClick}
-          className={`inline-flex items-center self-start px-2.5 py-0.5 ${!isPreview ? "cursor-pointer" : ""}`}
+          className={`inline-flex items-center px-2.5 py-0.5 ${!isPreview ? "cursor-pointer" : ""}`}
           style={{
             ...typeStyle("labelSmall"),
             borderRadius: shapes.full,
             backgroundColor: bg,
             color: fg,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            alignSelf: "flex-start",
+            ...nodeFrameStyle,
           }}
         >
           {resolveStr(label)}
@@ -818,8 +828,7 @@ export function M3NodeRenderer({
             ...styleByVariant[variant],
             ...typeStyle("labelLarge"),
             ...getWidthStyle(node),
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           {icon && <Icon name={icon} size={18} />}
@@ -867,8 +876,7 @@ export function M3NodeRenderer({
           style={{
             borderRadius: shapes.full,
             ...styles[variant],
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <Icon name={activeToggle && selectedIcon ? selectedIcon : icon} size={20} fill={activeToggle} />
@@ -887,8 +895,8 @@ export function M3NodeRenderer({
           ref={setMergedRef}
           {...commonAttrs}
           onClick={handleNodeClick}
-          className="w-full cursor-pointer"
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`${node.style.width === "fill" ? "w-full " : ""}cursor-pointer`}
+          style={nodeFrameStyle}
         >
           <div
             className="px-3.5 py-2 flex items-center gap-2.5"
@@ -951,6 +959,11 @@ export function M3NodeRenderer({
     case "Switch": {
       const { label, checked, showCheckIcon } = node.props;
       const isChecked = readBoundBool(checked);
+      const switchFill =
+        !node.style.alignSelf ||
+        node.style.alignSelf === "auto" ||
+        node.style.alignSelf === "stretch" ||
+        node.style.width === "fill";
 
       return (
         <div
@@ -964,8 +977,8 @@ export function M3NodeRenderer({
             }
             handleNodeClick(e);
           }}
-          className="w-full flex items-center justify-between gap-3 py-1 cursor-pointer"
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`${switchFill ? "w-full " : ""}flex items-center justify-between gap-3 py-1 cursor-pointer`}
+          style={nodeFrameStyle}
         >
           <span style={typeStyle("bodyMedium")}>{resolveStr(label)}</span>
           <span
@@ -1009,7 +1022,7 @@ export function M3NodeRenderer({
             handleNodeClick(e);
           }}
           className="flex items-center gap-2.5 py-1 cursor-pointer"
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          style={nodeFrameStyle}
         >
           <span
             role="checkbox"
@@ -1033,14 +1046,19 @@ export function M3NodeRenderer({
       const { label, value, min, max } = node.props;
       const liveVal = readBoundNumber(value);
       const pct = Math.max(0, Math.min(100, ((liveVal - min) / Math.max(1, max - min)) * 100));
+      const sliderFill =
+        !node.style.alignSelf ||
+        node.style.alignSelf === "auto" ||
+        node.style.alignSelf === "stretch" ||
+        node.style.width === "fill";
 
       return (
         <div
           ref={setMergedRef}
           {...commonAttrs}
           onClick={handleNodeClick}
-          className="w-full space-y-1 cursor-pointer"
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`${sliderFill ? "w-full " : ""}space-y-1 cursor-pointer`}
+          style={nodeFrameStyle}
         >
           <div className="flex items-center justify-between">
             <span style={typeStyle("labelMedium")}>{resolveStr(label)}</span>
@@ -1101,8 +1119,7 @@ export function M3NodeRenderer({
             color: isSelectedChip ? palette.onSecondaryContainer : palette.onSurfaceVariant,
             border: isSelectedChip ? "none" : `1px solid ${palette.outline}`,
             ...typeStyle("labelLarge"),
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           {(isSelectedChip || icon) && (
@@ -1145,14 +1162,13 @@ export function M3NodeRenderer({
             }
             handleNodeClick(e);
           }}
-          className="w-full flex items-center justify-between gap-3 px-3 py-2.5 cursor-pointer"
+          className={`${node.style.width === "fill" ? "w-full " : ""}flex items-center justify-between gap-3 px-3 py-2.5 cursor-pointer`}
           style={{
             borderRadius: renderConnectedRadius(shapes.medium),
             backgroundColor: connectedInfo
               ? palette.surfaceContainerHigh
               : resolveBg(node.style.backgroundToken, palette) ?? "transparent",
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -1249,13 +1265,12 @@ export function M3NodeRenderer({
           ref={setMergedRef}
           {...commonAttrs}
           onClick={handleNodeClick}
-          className={`w-full overflow-hidden ${!isPreview || node.action ? "cursor-pointer" : ""}`}
+          className={`${node.style.width === "fill" ? "w-full " : ""}overflow-hidden ${!isPreview || node.action ? "cursor-pointer" : ""}`}
           style={{
             borderRadius: radius,
             aspectRatio: ratioMap[aspectRatio],
             backgroundColor: palette.surfaceContainerHigh,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <img
@@ -1277,8 +1292,7 @@ export function M3NodeRenderer({
           className={`w-full shrink-0 ${!isPreview ? "cursor-pointer" : ""}`}
           style={{
             height: node.props.size,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         />
       );
@@ -1289,8 +1303,8 @@ export function M3NodeRenderer({
           ref={setMergedRef}
           {...commonAttrs}
           onClick={handleNodeClick}
-          className={`w-full py-1 ${!isPreview ? "cursor-pointer" : ""}`}
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`${node.style.width === "fill" ? "w-full " : ""}py-1 ${!isPreview ? "cursor-pointer" : ""}`}
+          style={nodeFrameStyle}
         >
           <div
             style={{
@@ -1309,7 +1323,7 @@ export function M3NodeRenderer({
           {...commonAttrs}
           onClick={handleNodeClick}
           className={`inline-flex items-center justify-center ${!isPreview ? "cursor-pointer" : ""}`}
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          style={nodeFrameStyle}
         >
           <M3LoadingIndicator
             size={node.props.size}
@@ -1327,8 +1341,8 @@ export function M3NodeRenderer({
           ref={setMergedRef}
           {...commonAttrs}
           onClick={handleNodeClick}
-          className={`w-full py-1 ${!isPreview ? "cursor-pointer" : ""}`}
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`${node.style.width === "fill" ? "w-full " : ""}py-1 ${!isPreview ? "cursor-pointer" : ""}`}
+          style={nodeFrameStyle}
         >
           <M3LinearProgress
             width={280}
@@ -1357,8 +1371,7 @@ export function M3NodeRenderer({
             borderRadius: shapes.full,
             backgroundColor: resolveBg(node.style.backgroundToken, palette) ?? palette.surfaceContainerHigh,
             color: palette.onSurface,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <Icon name={leadingIcon || "search"} size={20} color={palette.onSurfaceVariant} />
@@ -1438,8 +1451,7 @@ export function M3NodeRenderer({
             height: 36,
             borderRadius: shapes.full,
             border: `1px solid ${palette.outline}`,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           {options.map((opt, idx) => {
@@ -1516,6 +1528,7 @@ export function M3NodeRenderer({
               padding: getPaddingCss(node),
               backgroundColor: resolveBg(node.style.backgroundToken, palette),
               borderRadius: node.style.cornerRadius,
+              ...alignSelfStyle,
             }}
           >
             {filtered.length === 0 ? (
@@ -1572,8 +1585,7 @@ export function M3NodeRenderer({
               resolveBg(node.style.backgroundToken, palette) ??
               `${palette.surfaceContainerLow}80`,
             borderRadius: node.style.cornerRadius ?? shapes.medium,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           <div
@@ -1635,8 +1647,8 @@ export function M3NodeRenderer({
             }
             handleNodeClick(e);
           }}
-          className="relative w-full cursor-pointer"
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`relative ${node.style.width === "fill" ? "w-full " : ""}cursor-pointer`}
+          style={nodeFrameStyle}
         >
           <div
             className="px-3.5 py-2 flex items-center justify-between gap-2"
@@ -1723,8 +1735,8 @@ export function M3NodeRenderer({
           onClick={handleNodeClick}
           role="radiogroup"
           aria-label={label}
-          className={`w-full space-y-1.5 ${!isPreview ? "cursor-pointer" : ""}`}
-          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+          className={`${node.style.width === "fill" ? "w-full " : ""}space-y-1.5 ${!isPreview ? "cursor-pointer" : ""}`}
+          style={nodeFrameStyle}
         >
           {label && (
             <div style={{ ...typeStyle("labelLarge"), color: palette.primary }}>
@@ -1789,12 +1801,11 @@ export function M3NodeRenderer({
           {...commonAttrs}
           onClick={handleNodeClick}
           role="tablist"
-          className={`w-full flex items-stretch border-b ${!isPreview ? "cursor-pointer" : ""}`}
+          className={`${node.style.width === "fill" ? "w-full " : ""}flex items-stretch border-b ${!isPreview ? "cursor-pointer" : ""}`}
           style={{
             borderColor: palette.outlineVariant,
             backgroundColor: resolveBg(node.style.backgroundToken, palette) ?? palette.surface,
-            ...dndTransformStyle,
-            ...selectionRingStyle,
+            ...nodeFrameStyle,
           }}
         >
           {options.map((opt) => {

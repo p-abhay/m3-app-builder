@@ -104,6 +104,7 @@ function ShapePreviewArt({ shape }: { shape: ShapeScale }) {
 export function ThemePanel() {
   const {
     theme,
+    isDark,
     palette,
     shapes,
     transition,
@@ -193,6 +194,12 @@ export function ThemePanel() {
                   { key: "system", label: "System", icon: "brightness_auto" },
                 ]}
               />
+              {theme.mode === "system" && (
+                <p className="text-[11px] mt-1.5" style={{ color: palette.onSurfaceVariant }}>
+                  Auto following device settings ({isDark ? "Dark" : "Light"} active; exported{" "}
+                  <code>Theme.kt</code> uses <code>isSystemInDarkTheme()</code>)
+                </p>
+              )}
             </div>
 
             <div>

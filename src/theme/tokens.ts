@@ -15,7 +15,7 @@ export const DEFAULT_THEME: AppThemeConfig = {
   seedColor: "#6750A4",
   useDynamicColor: false,
   wallpaperId: "bloom",
-  mode: "light",
+  mode: "system",
   contrast: "standard",
   customOverrides: {},
   shapeScale: "rounded",

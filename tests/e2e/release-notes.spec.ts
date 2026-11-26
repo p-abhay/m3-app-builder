@@ -7,8 +7,8 @@ test.describe("Studio Info Icon: Release Notes & Future Roadmap", () => {
     await page.reload();
   });
 
-  test("opens Release Notes showing v0.4.0 through v0.1.0 sections and switches to Future roadmap", async ({ page }) => {
-    await expect(page.getByText("v0.4.0 Studio")).toBeVisible();
+  test("opens Release Notes showing v0.4.1 through v0.1.0 sections and switches to Future roadmap", async ({ page }) => {
+    await expect(page.getByText("v0.4.1 Studio")).toBeVisible();
 
     const infoBtn = page.getByTestId("studio-info-button");
     await expect(infoBtn).toBeVisible();
@@ -17,12 +17,17 @@ test.describe("Studio Info Icon: Release Notes & Future Roadmap", () => {
 
     const modal = page.getByTestId("release-notes-modal");
     await expect(modal).toBeVisible();
-    await expect(modal).toContainText("v0.4.0");
+    await expect(modal).toContainText("v0.4.1");
 
-    // Default tab shows Release Notes grouped under v0.4.0 .. v0.1.0 headings
+    // Default tab shows Release Notes grouped under v0.4.1 .. v0.1.0 headings
     const releaseTab = modal.getByRole("tab", { name: "Release Notes" });
     const futureTab = modal.getByRole("tab", { name: "Future" });
     await expect(releaseTab).toHaveAttribute("aria-selected", "true");
+
+    await expect(modal.getByTestId("release-group-v0.4.1")).toBeVisible();
+    await expect(modal.getByTestId("release-group-v0.4.1")).toContainText(/Auto Device Light\/Dark Theme/i);
+    await expect(modal.getByTestId("release-group-v0.4.1")).toContainText(/Left Panel NavigationRail Organization/i);
+    await expect(modal.getByTestId("release-group-v0.4.1")).toContainText(/Per-Component Self Alignment Control/i);
 
     await expect(modal.getByTestId("release-group-v0.4.0")).toBeVisible();
     await expect(modal.getByTestId("release-group-v0.4.0")).toContainText(/Core Controls & Modal Overlays/i);

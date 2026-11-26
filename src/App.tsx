@@ -14,7 +14,7 @@ import { Icon } from "@/components/Icon";
 import { APP_MILESTONE_LABEL } from "@/version";
 
 function StudioShell() {
-  const { palette, shapes, theme, updateTheme } = useM3Theme();
+  const { palette, shapes, theme, isDark, updateTheme } = useM3Theme();
   const project = useProjectStore((s) => s.project);
   const activeScreenId = useProjectStore((s) => s.activeScreenId);
   const selectedNodeId = useProjectStore((s) => s.selectedNodeId);
@@ -256,7 +256,19 @@ function StudioShell() {
 
           <button
             type="button"
-            onClick={() => updateTheme({ mode: theme.mode === "dark" ? "light" : "dark" })}
+            data-testid="header-theme-mode-button"
+            onClick={() => {
+              const nextMode =
+                theme.mode === "system" ? "light" : theme.mode === "light" ? "dark" : "system";
+              updateTheme({ mode: nextMode });
+            }}
+            title={
+              theme.mode === "system"
+                ? `Theme: Auto (following device ${isDark ? "Dark" : "Light"}) — click for Light`
+                : theme.mode === "light"
+                  ? "Theme: Light — click for Dark"
+                  : "Theme: Dark — click for System Auto"
+            }
             className="m3-press flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold cursor-pointer border-0"
             style={{
               borderRadius: shapes.full,
@@ -264,8 +276,19 @@ function StudioShell() {
               color: palette.onSecondaryContainer,
             }}
           >
-            <Icon name={theme.mode === "dark" ? "light_mode" : "dark_mode"} size={16} />
-            <span>{theme.mode === "dark" ? "Light" : "Dark"}</span>
+            <Icon
+              name={
+                theme.mode === "system"
+                  ? "brightness_auto"
+                  : theme.mode === "light"
+                    ? "light_mode"
+                    : "dark_mode"
+              }
+              size={16}
+            />
+            <span>
+              {theme.mode === "system" ? "Auto" : theme.mode === "light" ? "Light" : "Dark"}
+            </span>
           </button>
         </div>
       </header>
@@ -274,7 +297,7 @@ function StudioShell() {
       <BuilderDndProvider>
         <main
           className={`flex-1 min-h-0 grid ${
-            isPreview ? "grid-cols-[1fr_340px]" : "grid-cols-[310px_1fr_340px]"
+            isPreview ? "grid-cols-[1fr_340px]" : "grid-cols-[356px_1fr_340px]"
           }`}
         >
           {!isPreview && (

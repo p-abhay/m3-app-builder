@@ -109,4 +109,73 @@ test.describe("v0.4.0: Core Components, Modal Overlays, Tablet NavigationRail & 
     await modal.getByTestId("kotlin-file-AppStateStore.kt").click();
     await expect(modal.getByTestId("kotlin-code-viewer")).toContainText("val estimate: Long");
   });
+
+  test("v0.4.1: auto device theme, unclipped left NavigationRail tabs, and component self-alignment", async ({ page }) => {
+    // 1. Auto System Theme follows device prefers-color-scheme: dark in Studio & Compose export
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    const headerThemeBtn = page.getByTestId("header-theme-mode-button");
+    await expect(headerThemeBtn).toContainText("Auto");
+
+    const leftSidebar = page.getByTestId("left-sidebar");
+    // 2. All 5 left NavigationRail tabs render visibly without text clipping/truncation
+    for (const key of ["parts", "screens", "data", "tree", "tokens"] as const) {
+      const tabBtn = leftSidebar.getByTestId(`left-tab-${key}`);
+      await expect(tabBtn).toBeVisible();
+      const overflowCheck = await tabBtn.evaluate((btn) => {
+        const label = btn.querySelector("span:last-of-type") as HTMLElement;
+        const labelRect = label.getBoundingClientRect();
+        const btnRect = btn.getBoundingClientRect();
+        return {
+          scrollW: label.scrollWidth,
+          clientW: label.clientWidth,
+          rectW: labelRect.width,
+          fitsInsideButton: labelRect.right <= btnRect.right + 1 && labelRect.left >= btnRect.left - 1,
+        };
+      });
+      expect(overflowCheck.rectW).toBeGreaterThan(20);
+      expect(overflowCheck.scrollW).toBeLessThanOrEqual(overflowCheck.clientW + 1);
+      expect(overflowCheck.fitsInsideButton).toBe(true);
+    }
+
+    // Tokens tab confirms dark surface colors active automatically from system preference
+    await leftSidebar.getByTestId("left-tab-tokens").click();
+    await expect(leftSidebar.getByText(/^#[01][0-9A-F]{5}$/).first()).toBeVisible();
+
+    // Header mode toggle cycles Auto -> Light -> Dark -> Auto
+    await headerThemeBtn.click();
+    await expect(headerThemeBtn).toContainText("Light");
+    await headerThemeBtn.click();
+    await expect(headerThemeBtn).toContainText("Dark");
+    await headerThemeBtn.click();
+    await expect(headerThemeBtn).toContainText("Auto");
+
+    // 3. Component self-alignment control updates canvas CSS and Compose Modifier.align
+    await leftSidebar.getByTestId("left-tab-parts").click();
+    await leftSidebar.getByPlaceholder("Search components...").fill("Button");
+    await leftSidebar.getByTestId("palette-item-Button").click();
+
+    const device = page.getByTestId("android-device-frame");
+    const addedButton = device.locator('[data-node-type="Button"]').last();
+    await addedButton.click();
+
+    const rightSidebar = page.getByTestId("right-sidebar");
+    await rightSidebar.getByRole("button", { name: "Properties" }).click();
+    await rightSidebar.getByRole("button", { name: "Align Center" }).click();
+
+    await expect(addedButton).toHaveCSS("align-self", "center");
+
+    await page.getByTestId("mode-preview").click();
+    await expect(device.locator('[data-node-type="Button"]').last()).toHaveCSS("align-self", "center");
+    await page.getByTestId("mode-edit").click();
+
+    await page.getByTestId("export-kotlin-button").click();
+    const modal = page.getByTestId("compose-export-modal");
+    await modal.getByTestId("kotlin-file-Theme.kt").click();
+    await expect(modal.getByTestId("kotlin-code-viewer")).toContainText("darkTheme: Boolean = isSystemInDarkTheme()");
+    await modal.getByTestId("kotlin-file-HomeScreen.kt").click();
+    await expect(modal.getByTestId("kotlin-code-viewer")).toContainText(".align(Alignment.CenterHorizontally)");
+  });
 });

@@ -54,6 +54,8 @@ interface ChildScope {
 function childModOpts(scope: ChildScope, extraOpts: ModifierOptions = {}): ModifierOptions {
   return {
     inRowScope: scope.parentKind === "row",
+    inColumnScope: scope.parentKind === "column",
+    inBoxScope: scope.parentKind === "box",
     alignInFlowRow: scope.parentKind === "flowRow" ? scope.flowVerticalAlign : undefined,
     ...extraOpts,
   };
@@ -487,8 +489,12 @@ function emitInputControl(
           ? extraBody
           : `${assignExpr("it")}${extraBody ? `; ${extraBody}` : ""}`;
 
+      const allowAutoFill =
+        !node.style.alignSelf || node.style.alignSelf === "auto" || node.style.alignSelf === "stretch";
       const switchStyle =
-        scope.parentKind !== "flowRow" && (!node.style.width || node.style.width === "wrap")
+        scope.parentKind !== "flowRow" &&
+        allowAutoFill &&
+        (!node.style.width || node.style.width === "wrap")
           ? { ...node.style, width: "fill" as const }
           : node.style;
       const switchMod = buildModifierExpr(switchStyle, modOpts);

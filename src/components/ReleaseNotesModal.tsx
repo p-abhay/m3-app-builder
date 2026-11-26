@@ -25,8 +25,41 @@ interface ReleaseGroup {
 const RELEASE_GROUPS: ReleaseGroup[] = [
   {
     version: APP_MILESTONE_LABEL,
-    subtitle: "Core M3 Building Blocks, Modal Overlays, Tablet NavigationRail & Export Preflight",
+    subtitle: "Device Auto Theme, Left NavigationRail & Component Alignment",
     isCurrent: true,
+    items: [
+      {
+        title: "Auto Device Light/Dark Theme (Studio + Export)",
+        icon: "brightness_auto",
+        tag: "Patch",
+        points: [
+          "Projects and starter templates now default to System (Auto) mode, automatically tracking the user's OS/browser light or dark preference via prefers-color-scheme.",
+          "Updated the header theme toggle to cycle smoothly through Auto -> Light -> Dark, while exported Android Theme.kt defaults to isSystemInDarkTheme().",
+        ],
+      },
+      {
+        title: "Left Panel NavigationRail Organization",
+        icon: "view_sidebar",
+        tag: "UX Fix",
+        points: [
+          "Reorganized the Left Sidebar with a dedicated Material 3 vertical NavigationRail for Parts, Screens, Data, AST Tree, and Tokens.",
+          "Eliminated tab label truncation so every section icon and title stays crisp and readable without clipping.",
+        ],
+      },
+      {
+        title: "Per-Component Self Alignment Control",
+        icon: "align_horizontal_center",
+        tag: "Layout",
+        points: [
+          "Added Alignment controls (Auto, Left, Center, Right, Stretch) inside Properties Inspector -> Layout & Surface for body and container child components.",
+          "Synchronized live Studio Canvas/Preview CSS alignment with native Compose Modifier.align(Alignment.*) and .fillMaxWidth() generation.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "v0.4.0",
+    subtitle: "Core M3 Building Blocks, Modal Overlays, Tablet NavigationRail & Export Preflight",
     items: [
       {
         title: "Core Controls & Modal Overlays",

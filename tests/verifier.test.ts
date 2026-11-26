@@ -4,6 +4,7 @@ import { createBlankScreen, createNode } from "../src/ast/factory.ts";
 import { insertNode } from "../src/ast/operations.ts";
 import { evaluateVisibility } from "../src/ast/state.ts";
 import { STARTER_TEMPLATES } from "../src/ast/templates.ts";
+import { DEFAULT_THEME } from "../src/theme/tokens.ts";
 import { generateGradleProject } from "../src/codegen/gradle/index.ts";
 import { verifyGradleBundle } from "../src/codegen/verifier.ts";
 
@@ -160,5 +161,59 @@ describe("v0.4.0: Core Components, Overlays, Adaptive NavRail & Preflight Verifi
     assert.equal(report.ok, false);
     assert.ok(report.errorCount >= 2);
     assert.ok(report.warningCount >= 3);
+  });
+
+  it("defaults projects to system auto dark/light theme and compiles alignSelf across scopes", () => {
+    assert.equal(DEFAULT_THEME.mode, "system");
+
+    const proj = STARTER_TEMPLATES.find((t) => t.id === "blank")!.build();
+    assert.equal(proj.theme.mode, "system");
+
+    let scr = proj.screens[0];
+    const centerBtn = createNode("Button", {
+      props: { label: "Centered", variant: "filled", enabled: true },
+      style: { width: "wrap", alignSelf: "center" },
+    });
+    const endBtn = createNode("Button", {
+      props: { label: "RightAligned", variant: "outlined", enabled: true },
+      style: { width: "wrap", alignSelf: "end" },
+    });
+    const stretchBtn = createNode("Button", {
+      props: { label: "Stretched", variant: "tonal", enabled: true },
+      style: { width: "wrap", alignSelf: "stretch" },
+    });
+    const row = createNode("Row", {});
+    const rowTxt = createNode("Text", {
+      props: { text: "BottomInRow", role: "bodyMedium", colorToken: "onSurface", align: "left" },
+      style: { width: "wrap", alignSelf: "end" },
+    });
+    const box = createNode("Box", {});
+    const boxBadge = createNode("Badge", {
+      props: { label: "NEW", colorRole: "primary" },
+      style: { width: "wrap", alignSelf: "end" },
+    });
+
+    scr = insertNode(scr, scr.slots.bodyId, centerBtn);
+    scr = insertNode(scr, scr.slots.bodyId, endBtn);
+    scr = insertNode(scr, scr.slots.bodyId, stretchBtn);
+    scr = insertNode(scr, scr.slots.bodyId, row);
+    scr = insertNode(scr, row.id, rowTxt);
+    scr = insertNode(scr, scr.slots.bodyId, box);
+    scr = insertNode(scr, box.id, boxBadge);
+    proj.screens[0] = scr;
+
+    const bundle = generateGradleProject(proj);
+    const report = verifyGradleBundle(proj, bundle);
+    assert.equal(report.ok, true, `Expected preflight pass, got: ${JSON.stringify(report.issues)}`);
+
+    const themeKt = bundle.files.find((f) => f.shortName === "Theme.kt")!.content;
+    assert.match(themeKt, /darkTheme:\s*Boolean\s*=\s*isSystemInDarkTheme\(\)/);
+
+    const screenKt = bundle.files.find((f) => f.category === "screen")!.content;
+    assert.match(screenKt, /\.align\(Alignment\.CenterHorizontally\)/);
+    assert.match(screenKt, /\.align\(Alignment\.End\)/);
+    assert.match(screenKt, /\.fillMaxWidth\(\)/);
+    assert.match(screenKt, /\.align\(Alignment\.Bottom\)/);
+    assert.match(screenKt, /\.align\(Alignment\.CenterEnd\)/);
   });
 });

@@ -262,6 +262,10 @@ export interface ModifierOptions {
   extra?: string[];
   /** True when inside a non-wrapping `RowScope` (`width: "fill"` maps to `.weight(1f)`). */
   inRowScope?: boolean;
+  /** True when inside a `ColumnScope` (`alignSelf` maps to `Modifier.align(Alignment.*)`). */
+  inColumnScope?: boolean;
+  /** True when inside a `BoxScope` (`alignSelf` maps to `Modifier.align(Alignment.*)`). */
+  inBoxScope?: boolean;
   /** Vertical alignment applied inside `FlowRowScope` (`Modifier.align(...)`). */
   alignInFlowRow?: "top" | "center" | "bottom";
 }
@@ -281,6 +285,32 @@ export function buildModifierExpr(
     parts.push(".align(Alignment.CenterVertically)");
   } else if (options.alignInFlowRow === "bottom") {
     parts.push(".align(Alignment.Bottom)");
+  } else if (style.alignSelf && style.alignSelf !== "auto" && style.alignSelf !== "stretch") {
+    if (options.inColumnScope) {
+      const colAlign =
+        style.alignSelf === "start"
+          ? "Alignment.Start"
+          : style.alignSelf === "center"
+            ? "Alignment.CenterHorizontally"
+            : "Alignment.End";
+      parts.push(`.align(${colAlign})`);
+    } else if (options.inRowScope) {
+      const rowAlign =
+        style.alignSelf === "start"
+          ? "Alignment.Top"
+          : style.alignSelf === "center"
+            ? "Alignment.CenterVertically"
+            : "Alignment.Bottom";
+      parts.push(`.align(${rowAlign})`);
+    } else if (options.inBoxScope) {
+      const boxAlign =
+        style.alignSelf === "start"
+          ? "Alignment.CenterStart"
+          : style.alignSelf === "center"
+            ? "Alignment.Center"
+            : "Alignment.CenterEnd";
+      parts.push(`.align(${boxAlign})`);
+    }
   }
 
   if (style.margin) {
@@ -290,10 +320,13 @@ export function buildModifierExpr(
     }
   }
 
-  if (!options.inRowScope && style.width === "fill") parts.push(".fillMaxWidth()");
+  const stretchWidth = style.alignSelf === "stretch" && !options.inRowScope;
+  const stretchHeight = style.alignSelf === "stretch" && options.inRowScope;
+
+  if (!options.inRowScope && (style.width === "fill" || stretchWidth)) parts.push(".fillMaxWidth()");
   else if (typeof style.width === "number") parts.push(`.width(${style.width}.dp)`);
 
-  if (style.height === "fill") parts.push(".fillMaxHeight()");
+  if (style.height === "fill" || stretchHeight) parts.push(".fillMaxHeight()");
   else if (typeof style.height === "number") parts.push(`.height(${style.height}.dp)`);
 
   if (typeof style.cornerRadius === "number" && style.cornerRadius > 0) {

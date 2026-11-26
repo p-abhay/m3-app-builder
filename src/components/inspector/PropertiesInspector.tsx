@@ -1682,6 +1682,84 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               <option value="fill">Fill Width</option>
             </select>
           </FieldRow>
+          {node.id !== activeScreen.slots.bodyId &&
+            node.type !== "TopAppBar" &&
+            node.type !== "FloatingActionButton" &&
+            node.type !== "AlertDialog" &&
+            node.type !== "ModalBottomSheet" && (
+              <FieldRow label="Alignment">
+                <div
+                  role="group"
+                  aria-label="Component Alignment"
+                  className="grid grid-cols-5 gap-1 p-1"
+                  style={{
+                    backgroundColor: palette.surfaceContainerHigh,
+                    borderRadius: shapes.small,
+                  }}
+                >
+                  {(
+                    [
+                      {
+                        key: "auto",
+                        label: "Auto",
+                        title: "Align Auto (inherit parent)",
+                        icon: "hdr_auto",
+                      },
+                      {
+                        key: "start",
+                        label: "Left",
+                        title: "Align Start / Left",
+                        icon: "align_horizontal_left",
+                      },
+                      {
+                        key: "center",
+                        label: "Center",
+                        title: "Align Center",
+                        icon: "align_horizontal_center",
+                      },
+                      {
+                        key: "end",
+                        label: "Right",
+                        title: "Align End / Right",
+                        icon: "align_horizontal_right",
+                      },
+                      {
+                        key: "stretch",
+                        label: "Stretch",
+                        title: "Align Stretch",
+                        icon: "fit_screen",
+                      },
+                    ] as const
+                  ).map((opt) => {
+                    const currentAlign = node.style.alignSelf ?? "auto";
+                    const active = currentAlign === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        title={opt.title}
+                        aria-label={opt.title}
+                        aria-pressed={active}
+                        onClick={() =>
+                          updateNodeStyle(node.id, {
+                            alignSelf: opt.key === "auto" ? undefined : opt.key,
+                          })
+                        }
+                        className="m3-press flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 text-[10px] font-semibold border-0 cursor-pointer"
+                        style={{
+                          borderRadius: shapes.extraSmall,
+                          backgroundColor: active ? palette.secondaryContainer : "transparent",
+                          color: active ? palette.onSecondaryContainer : palette.onSurfaceVariant,
+                        }}
+                      >
+                        <Icon name={opt.icon} size={14} />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </FieldRow>
+            )}
           <div className="grid grid-cols-3 gap-2">
             <FieldRow label="Height (dp)">
               <input

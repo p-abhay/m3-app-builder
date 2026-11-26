@@ -1,8 +1,8 @@
-# M3 App Builder (`v0.4.0`)
+# M3 App Builder (`v0.4.1`)
 
 A visual, no-code Android UI builder and live **Material 3 Expressive (`M3E`)** design studio built with **React 18, TypeScript, Vite, Tailwind CSS v4, Zustand, `@dnd-kit`, and `motion`**.
 
-Inspired by Android Jetpack Compose architecture and Material 3 Expressive token design, releases follow pre-`1.0.0` SemVer (`0.1.0`, `0.2.0`, `0.3.0`, `0.4.0`...) building toward `v1.0.0` GA.
+Inspired by Android Jetpack Compose architecture and Material 3 Expressive token design, releases follow pre-`1.0.0` SemVer (`0.1.0`, `0.2.0`, `0.3.0`, `0.4.0`, `0.4.1`...) building toward `v1.0.0` GA.
 
 ---
 
@@ -13,7 +13,8 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 | **`v0.1.0`** | **Visual Android Studio, M3E Theming & Interactive Preview** | **Completed** | Phases 1–5 + Release Notes dialog: M3E theme/system token engine, normalized multi-screen Android AST, starter templates, slot-aware DnD & AST tree editor, Property Inspector, Material Symbols picker, and isolated multi-screen runtime preview. |
 | **`v0.2.0`** | **Kotlin + Jetpack Compose Export & Gradle `.zip`** | **Completed** | Phases 6–7: Kotlin + Jetpack Compose AST compiler (`Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt`, `*Screen.kt`, `AppNavHost.kt`, `MainActivity.kt`), Hybrid Stable M3 + M3 Expressive Alpha toggle, live Android package/SDK configuration, and full Android Studio Gradle `.zip` export. |
 | **`v0.3.0`** | **State Variables, Collections, Search/Sort & Pluggable Persistence** | **Completed** | Phase 8: App state variables & typed collections (**Data** tab), `SearchBar` / `SegmentedButton` / `DataList` components, **Todo & Tasks** CRUD template (**5 total**), two-way data bindings, `localStorage` Preview persistence, and pluggable Android `StateStorage` (`DataStore Preferences` / `SharedPreferences`) + `AppStateStore.kt`. |
-| **`v0.4.0`** | **Core M3 Building Blocks, Overlays, Adaptive Tablet UI & Preflight** | **Completed (Current)** | Phase 9: 30 Material 3 components (`DropdownMenu`, `RadioGroup`, `Tabs`, `AlertDialog`, container `ModalBottomSheet`), `openOverlay` / `dismissOverlay`, Tablet `NavigationRail` + Compose `BoxWithConstraints`, `visibleWhen` conditional visibility, TopAppBar action & custom collection schema/seed editors, typed CRUD codegen fixes, and in-browser **Static Preflight Verifier**. Verified by unit tests (`npm test`) and Playwright E2E specs (`npm run test:e2e`). |
+| **`v0.4.0`** | **Core M3 Building Blocks, Overlays, Adaptive Tablet UI & Preflight** | **Completed** | Phase 9: 30 Material 3 components (`DropdownMenu`, `RadioGroup`, `Tabs`, `AlertDialog`, container `ModalBottomSheet`), `openOverlay` / `dismissOverlay`, Tablet `NavigationRail` + Compose `BoxWithConstraints`, `visibleWhen` conditional visibility, TopAppBar action & custom collection schema/seed editors, typed CRUD codegen fixes, and in-browser **Static Preflight Verifier**. Verified by unit tests (`npm test`) and Playwright E2E specs (`npm run test:e2e`). |
+| **`v0.4.1`** | **Auto Device Theme, Left NavigationRail & Component Alignment** | **Completed (Current)** | Default `system` auto Light/Dark theme tracking `prefers-color-scheme` in Studio and `isSystemInDarkTheme()` in Compose export, vertical M3 `NavigationRail` in the Left Sidebar removing tab cutoff, and Inspector **Alignment** (`Auto`, `Left`, `Center`, `Right`, `Stretch`) synced to Studio & Compose `Modifier.align(...)`. |
 | **`v0.5.0`** | **Local Gradle APK Build, Download & ADB Device Deploy** | **Planned Next** | Abstract `AndroidBuildService` + `DeviceDeployService`, local Gradle `assembleDebug` companion bridge, downloadable `app-debug.apk`, `adb` USB/Wi-Fi/Emulator install & launch, and a guided **Setup Prerequisites Doctor** (JDK 17, Android SDK, Gradle & USB Debugging). |
 | **`v0.6.0`** | **GitHub Actions Android Build CI & Sample APKs** | **Roadmap** | Path-filtered `android-export` CI workflow verifying Gradle compilation across exported apps and publishing downloadable `.apk` artifacts. |
 | **`v1.0.0`** | **AI Co-Pilot, Cloud Previews & Production GA** | **Target 1.0** | Compact AI design spec / AST patch bridge, GitHub repository export sync, cloud Android builds, and Studio 1.0 stability. |
@@ -66,7 +67,7 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 ### Studio Info & Release Notes Modal
 *Files: [`src/components/ReleaseNotesModal.tsx`](src/components/ReleaseNotesModal.tsx), [`src/version.ts`](src/version.ts), [`src/App.tsx`](src/App.tsx)*
 
-- Clicking the **`i` info icon** next to the `v0.4.0 Studio` pill in the top header opens the SemVer release modal with **Release Notes** (`v0.4.0`, `v0.3.0`, `v0.2.0`, and `v0.1.0`) and **Future** (`v0.5.0` → `v1.0.0` roadmap).
+- Clicking the **`i` info icon** next to the `v0.4.1 Studio` pill in the top header opens the SemVer release modal with **Release Notes** (`v0.4.1`, `v0.4.0`, `v0.3.0`, `v0.2.0`, and `v0.1.0`) and **Future** (`v0.5.0` → `v1.0.0` roadmap).
 
 ---
 
@@ -168,17 +169,17 @@ m3-app-builder/
 │   │   ├── ComposeExportModal.tsx # Kotlin/Gradle explorer, Preflight Verifier, M3E & Storage toggles
 │   │   ├── DataStateSidebar.tsx   # App variables, custom collection fields/seeds & storage editor
 │   │   ├── DevicePreview.tsx      # Phone / Tablet NavigationRail frame, overlay scrims & Preview bar
-│   │   ├── LeftSidebar.tsx        # Parts, Screens & BottomNav, Data, AST Tree, Tokens tabs
+│   │   ├── LeftSidebar.tsx        # Vertical NavigationRail: Parts, Screens, Data, AST Tree, Tokens
 │   │   ├── RightSidebar.tsx       # Theme & System / Properties Inspector tabs
 │   │   ├── ThemePanel.tsx         # Color presets, dynamic wallpaper, fonts, shapes, density, bars
 │   │   ├── TemplatesModal.tsx     # Starter template browser
 │   │   ├── ProjectJsonModal.tsx   # AST JSON import/export modal
-│   │   └── ReleaseNotesModal.tsx  # SemVer Release Notes (v0.4.0..v0.1.0) & Future Roadmap modal
+│   │   └── ReleaseNotesModal.tsx  # SemVer Release Notes (v0.4.1..v0.1.0) & Future Roadmap modal
 │   ├── store/
 │   │   ├── useProjectStore.ts  # Undoable AST + Theme + Data State + localStorage persistence
 │   │   └── usePreviewStore.ts  # Isolated preview runtime state, overlays, CRUD & persistence
 │   ├── theme/                  # M3 seed palette generator, fonts, tokens, ThemeContext
-│   └── version.ts              # Pre-1.0 SemVer version constant (0.4.0) synced with package.json
+│   └── version.ts              # Pre-1.0 SemVer version constant (0.4.1) synced with package.json
 └── tests/
     ├── ast.test.ts             # AST schema, tree operations & multi-screen unit tests
     ├── compose.codegen.test.ts # Phase 6 Kotlin + Compose AST compiler unit tests
