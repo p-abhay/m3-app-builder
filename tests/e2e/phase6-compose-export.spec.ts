@@ -107,4 +107,36 @@ test.describe("Phase 6: Kotlin + Jetpack Compose Export & Live Code Viewer", () 
     await expect(viewer).toContainText("SignInScreen(");
     await expect(viewer).toContainText("CreateAccountScreen(");
   });
+
+  test("generates compilable ExploreScreen FlowRow, AutoMirrored ArrowBack, and single-scroll HomeScreen with nested Column", async ({ page }) => {
+    const leftSidebar = page.getByTestId("left-sidebar");
+    // Drop a default Column (scrollable: true) into HomeScreen body -> must NOT emit nested verticalScroll()
+    await leftSidebar.getByRole("button", { name: "Parts" }).click();
+    await leftSidebar.getByTestId("palette-item-Column").click();
+
+    await page.getByTestId("export-kotlin-button").click();
+    const modal = page.getByTestId("compose-export-modal");
+    const viewer = modal.getByTestId("kotlin-code-viewer");
+
+    await modal.getByTestId("kotlin-file-HomeScreen.kt").click();
+    await expect(viewer).toContainText("fun HomeScreen(");
+    const homeCode = await viewer.textContent();
+    expect(homeCode).toBeTruthy();
+    const scrollMatches = homeCode!.match(/\.verticalScroll\(rememberScrollState\(\)\)/g) ?? [];
+    expect(scrollMatches.length).toBe(1);
+    expect(homeCode!).toContain(".weight(1f)");
+
+    await modal.getByTestId("kotlin-file-ExploreScreen.kt").click();
+    await expect(viewer).toContainText("FlowRow(");
+    const lines = await viewer.locator(":scope > div").allTextContents();
+    const flowLine = lines.find((l) => l.includes("FlowRow("));
+    expect(flowLine).toBeTruthy();
+    expect(flowLine!).toContain("verticalArrangement = Arrangement.spacedBy(8.dp)");
+    expect(flowLine!).not.toContain("verticalAlignment");
+    await expect(viewer).toContainText("Modifier.align(Alignment.CenterVertically)");
+    await expect(viewer).toContainText("progress = { 0.72f }");
+
+    await modal.getByTestId("kotlin-file-SettingsScreen.kt").click();
+    await expect(viewer).toContainText("Icons.AutoMirrored.Rounded.ArrowBack");
+  });
 });

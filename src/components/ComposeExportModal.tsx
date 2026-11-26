@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { generateComposeProject, type GeneratedKotlinFile } from "@/codegen/compose";
+import { generateGradleProject, type GradleExportFile } from "@/codegen/gradle";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
 import { Icon } from "./Icon";
@@ -9,41 +9,54 @@ interface ComposeExportModalProps {
   onClose: () => void;
 }
 
-const CATEGORY_ORDER: { key: GeneratedKotlinFile["category"]; label: string }[] = [
-  { key: "screen", label: "Screens" },
-  { key: "navigation", label: "Navigation" },
-  { key: "app", label: "Entry Activity" },
-  { key: "theme", label: "M3 Theme Tokens" },
+const CATEGORY_ORDER: { key: GradleExportFile["category"]; label: string; icon: string }[] = [
+  { key: "screen", label: "Screens", icon: "smartphone" },
+  { key: "navigation", label: "Navigation", icon: "account_tree" },
+  { key: "app", label: "Entry Activity", icon: "account_tree" },
+  { key: "theme", label: "M3 Theme Tokens", icon: "palette" },
+  { key: "gradle", label: "Gradle & Build", icon: "build" },
+  { key: "manifest", label: "Manifest", icon: "description" },
+  { key: "resource", label: "Android Resources", icon: "folder" },
 ];
 
 export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
   const { palette, shapes } = useM3Theme();
   const project = useProjectStore((s) => s.project);
+  const setPackageName = useProjectStore((s) => s.setPackageName);
 
   const [m3Expressive, setM3Expressive] = useState(false);
+  const [minSdk, setMinSdk] = useState(26);
+  const [targetSdk, setTargetSdk] = useState(35);
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
-  const result = useMemo(
-    () => generateComposeProject(project, { m3Expressive }),
-    [project, m3Expressive],
+  const bundle = useMemo(
+    () =>
+      generateGradleProject(project, {
+        m3Expressive,
+        packageName: project.packageName,
+        minSdk,
+        targetSdk,
+        compileSdk: Math.max(targetSdk, 35),
+      }),
+    [project, m3Expressive, minSdk, targetSdk],
   );
 
   useEffect(() => {
     if (!open) return;
-    if (!result.files.some((f) => f.path === selectedPath)) {
+    if (!bundle.files.some((f) => f.path === selectedPath)) {
       const preferred =
-        result.files.find((f) => f.category === "screen") ?? result.files[0];
+        bundle.files.find((f) => f.category === "screen") ?? bundle.files[0];
       if (preferred) setSelectedPath(preferred.path);
     }
-  }, [open, result.files, selectedPath]);
+  }, [open, bundle.files, selectedPath]);
 
   if (!open) return null;
 
   const activeFile =
-    result.files.find((f) => f.path === selectedPath) ??
-    result.files.find((f) => f.category === "screen") ??
-    result.files[0];
+    bundle.files.find((f) => f.path === selectedPath) ??
+    bundle.files.find((f) => f.category === "screen") ??
+    bundle.files[0];
 
   const handleCopy = async () => {
     if (!activeFile) return;
@@ -62,13 +75,24 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = activeFile.shortName;
+    a.download = activeFile.shortName.split("/").pop() || "Export.kt";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const handleDownloadZip = () => {
+    const zipBytes = bundle.createZipBytes();
+    const blob = new Blob([Uint8Array.from(zipBytes)], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${bundle.projectSlug}-android-studio.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const codeLines = activeFile ? activeFile.content.split("\n") : [];
-  const warningCount = result.diagnostics.filter((d) => d.severity === "warning").length;
+  const warningCount = bundle.compose.diagnostics.filter((d) => d.severity === "warning").length;
 
   return (
     <div
@@ -78,7 +102,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
     >
       <div
         data-testid="compose-export-modal"
-        className="w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl border"
+        className="w-full max-w-5xl h-[86vh] flex flex-col overflow-hidden shadow-2xl border"
         style={{
           backgroundColor: palette.surfaceContainerLow,
           borderColor: palette.outlineVariant,
@@ -118,12 +142,12 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
                 </span>
               </div>
               <p className="text-xs truncate" style={{ color: palette.onSurfaceVariant }}>
-                {result.packageName} • {result.files.length} generated .kt files • {project.screens.length} screens
+                {bundle.packageName} • {bundle.files.length} project files • {project.screens.length} screens
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             <label
               className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold cursor-pointer select-none"
               style={{
@@ -143,6 +167,21 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
 
             <button
               type="button"
+              data-testid="download-gradle-zip"
+              onClick={handleDownloadZip}
+              className="m3-press flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold border-0 cursor-pointer"
+              style={{
+                borderRadius: shapes.full,
+                backgroundColor: palette.primary,
+                color: palette.onPrimary,
+              }}
+            >
+              <Icon name="folder_zip" size={15} />
+              <span>Download Android Studio .zip</span>
+            </button>
+
+            <button
+              type="button"
               onClick={onClose}
               aria-label="Close"
               className="m3-press w-8 h-8 flex items-center justify-center border-0 bg-transparent cursor-pointer"
@@ -153,17 +192,109 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
           </div>
         </div>
 
+        {/* Android Package & SDK Configuration Bar */}
+        <div
+          className="px-5 py-2.5 border-b flex flex-wrap items-center gap-4 text-xs shrink-0"
+          style={{
+            borderColor: palette.outlineVariant,
+            backgroundColor: palette.surfaceContainer,
+          }}
+        >
+          <label className="flex items-center gap-2">
+            <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+              Package Name
+            </span>
+            <input
+              type="text"
+              data-testid="gradle-package-input"
+              aria-label="Android Package Name"
+              value={project.packageName}
+              onChange={(e) => setPackageName(e.target.value)}
+              className="px-2.5 py-1 text-xs font-mono border outline-none w-56"
+              style={{
+                borderRadius: shapes.small,
+                backgroundColor: palette.surfaceContainerLowest,
+                borderColor: palette.outlineVariant,
+                color: palette.onSurface,
+              }}
+            />
+          </label>
+
+          {bundle.packageName !== project.packageName.trim() && (
+            <span
+              className="text-[11px] font-mono px-2 py-0.5"
+              style={{
+                borderRadius: shapes.small,
+                backgroundColor: palette.secondaryContainer,
+                color: palette.onSecondaryContainer,
+              }}
+            >
+              normalized: {bundle.packageName}
+            </span>
+          )}
+
+          <label className="flex items-center gap-1.5">
+            <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+              minSdk
+            </span>
+            <select
+              data-testid="gradle-minsdk-select"
+              aria-label="Minimum Android SDK"
+              value={minSdk}
+              onChange={(e) => setMinSdk(Number(e.target.value))}
+              className="px-2 py-1 text-xs border outline-none"
+              style={{
+                borderRadius: shapes.small,
+                backgroundColor: palette.surfaceContainerLowest,
+                borderColor: palette.outlineVariant,
+                color: palette.onSurface,
+              }}
+            >
+              {[24, 26, 28, 30].map((v) => (
+                <option key={v} value={v}>
+                  API {v}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-1.5">
+            <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+              targetSdk
+            </span>
+            <select
+              data-testid="gradle-targetsdk-select"
+              aria-label="Target Android SDK"
+              value={targetSdk}
+              onChange={(e) => setTargetSdk(Number(e.target.value))}
+              className="px-2 py-1 text-xs border outline-none"
+              style={{
+                borderRadius: shapes.small,
+                backgroundColor: palette.surfaceContainerLowest,
+                borderColor: palette.outlineVariant,
+                color: palette.onSurface,
+              }}
+            >
+              {[34, 35, 36].map((v) => (
+                <option key={v} value={v}>
+                  API {v}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         {/* Diagnostics Banner */}
-        {result.diagnostics.length > 0 && (
+        {bundle.compose.diagnostics.length > 0 && (
           <div
             className="px-5 py-2 border-b flex flex-wrap items-center gap-x-4 gap-y-1 text-xs shrink-0"
             style={{
               borderColor: palette.outlineVariant,
-              backgroundColor: warningCount > 0 ? palette.errorContainer : palette.surfaceContainer,
+              backgroundColor: warningCount > 0 ? palette.errorContainer : palette.surfaceContainerLow,
               color: warningCount > 0 ? palette.onErrorContainer : palette.onSurfaceVariant,
             }}
           >
-            {result.diagnostics.map((diag, idx) => (
+            {bundle.compose.diagnostics.map((diag, idx) => (
               <div key={idx} className="flex items-center gap-1.5">
                 <Icon
                   name={diag.severity === "warning" ? "warning" : "info"}
@@ -177,7 +308,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
         )}
 
         {/* Split Explorer + Code Viewer */}
-        <div className="flex-1 min-h-0 grid grid-cols-[250px_1fr]">
+        <div className="flex-1 min-h-0 min-w-0 grid grid-cols-[260px_minmax(0,1fr)]">
           {/* Left File Tree */}
           <aside
             className="no-scrollbar overflow-y-auto border-r p-3 space-y-4"
@@ -187,7 +318,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
             }}
           >
             {CATEGORY_ORDER.map((cat) => {
-              const items = result.files.filter((f) => f.category === cat.key);
+              const items = bundle.files.filter((f) => f.category === cat.key);
               if (items.length === 0) return null;
               return (
                 <div key={cat.key} className="space-y-1">
@@ -216,7 +347,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
                         }}
                       >
                         <Icon
-                          name={cat.key === "theme" ? "palette" : cat.key === "screen" ? "smartphone" : "account_tree"}
+                          name={cat.icon}
                           size={15}
                           color={active ? palette.onSecondaryContainer : palette.primary}
                         />
@@ -230,20 +361,21 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
           </aside>
 
           {/* Right Source Code Pane */}
-          <section className="flex flex-col min-h-0">
+          <section className="flex flex-col min-h-0 min-w-0 overflow-hidden">
             <div
-              className="px-4 py-2 border-b flex items-center justify-between gap-3 shrink-0"
+              className="px-4 py-2 border-b flex items-center justify-between gap-3 shrink-0 min-w-0"
               style={{
                 borderColor: palette.outlineVariant,
                 backgroundColor: palette.surfaceContainer,
               }}
             >
-              <span className="text-xs font-mono truncate" style={{ color: palette.onSurfaceVariant }}>
+              <span className="text-xs font-mono truncate min-w-0 flex-1" style={{ color: palette.onSurfaceVariant }}>
                 {activeFile?.path}
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
+                  data-testid="download-single-file"
                   onClick={handleDownloadFile}
                   className="m3-press flex items-center gap-1.5 px-3 py-1 text-xs font-semibold border-0 cursor-pointer"
                   style={{
@@ -253,7 +385,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
                   }}
                 >
                   <Icon name="download" size={14} />
-                  <span>Download .kt</span>
+                  <span>Download File</span>
                 </button>
                 <button
                   type="button"
@@ -262,8 +394,8 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
                   className="m3-press flex items-center gap-1.5 px-3 py-1 text-xs font-semibold border-0 cursor-pointer"
                   style={{
                     borderRadius: shapes.full,
-                    backgroundColor: palette.primary,
-                    color: palette.onPrimary,
+                    backgroundColor: palette.secondaryContainer,
+                    color: palette.onSecondaryContainer,
                   }}
                 >
                   <Icon name={copied ? "check" : "content_copy"} size={14} />
@@ -273,12 +405,12 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
             </div>
 
             <div
-              className="no-scrollbar flex-1 min-h-0 overflow-auto p-4"
+              className="no-scrollbar flex-1 min-h-0 min-w-0 overflow-auto p-4"
               style={{ backgroundColor: palette.surfaceContainerLowest }}
             >
               <pre
                 data-testid="kotlin-code-viewer"
-                className="m-0 font-mono text-xs leading-relaxed"
+                className="m-0 font-mono text-xs leading-relaxed w-max min-w-full"
                 style={{ color: palette.onSurface }}
               >
                 {codeLines.map((line, idx) => (
@@ -306,7 +438,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
           }}
         >
           <span style={{ color: palette.onSurfaceVariant }}>
-            Phase 6 Compiler • Full Gradle Android Studio .zip packaging arrives in Phase 7
+            Android Studio Ladybug / Meerkat+ ready • Version Catalog + Compose Compiler Gradle plugin
           </span>
           <button
             type="button"

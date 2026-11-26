@@ -11,6 +11,7 @@ import { ReleaseNotesModal } from "@/components/ReleaseNotesModal";
 import { RightSidebar } from "@/components/RightSidebar";
 import { TemplatesModal } from "@/components/TemplatesModal";
 import { Icon } from "@/components/Icon";
+import { APP_MILESTONE_LABEL } from "@/version";
 
 function StudioShell() {
   const { palette, shapes, theme, updateTheme } = useM3Theme();
@@ -107,14 +108,14 @@ function StudioShell() {
                 style={{ color: palette.onSurface }}
               />
               <span
-                className="text-[10px] font-bold px-2 py-0.5 uppercase shrink-0"
+                className="text-[10px] font-bold px-2 py-0.5 tracking-wide shrink-0"
                 style={{
                   borderRadius: shapes.full,
                   backgroundColor: isPreview ? palette.tertiaryContainer : palette.primaryContainer,
                   color: isPreview ? palette.onTertiaryContainer : palette.onPrimaryContainer,
                 }}
               >
-                {isPreview ? "Interactive Preview" : "V1 Studio"}
+                {isPreview ? "Interactive Preview" : `${APP_MILESTONE_LABEL} Studio`}
               </span>
               <button
                 type="button"
