@@ -39,7 +39,7 @@ function StudioShell() {
   const isPreview = editorMode === "preview";
 
   const enterPreview = () => {
-    startPreview(project.initialScreenId);
+    startPreview(project.initialScreenId, project.id, project.state);
     setEditorMode("preview");
   };
 

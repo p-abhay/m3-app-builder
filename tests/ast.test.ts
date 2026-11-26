@@ -171,7 +171,7 @@ describe("Screen and project operations", () => {
     );
 
     // Deleting the last screen is blocked
-    const blank = STARTER_TEMPLATES[3].build();
+    const blank = STARTER_TEMPLATES.find((t) => t.id === "blank")!.build();
     assert.equal(removeScreenFromProject(blank, blank.screens[0].id), blank);
   });
 });

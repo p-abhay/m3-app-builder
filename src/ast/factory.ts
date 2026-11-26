@@ -2,6 +2,7 @@ import type {
   ComponentNode,
   ComponentStyle,
   ComponentType,
+  NodeBindings,
   NodeOfType,
   NodePropsMap,
   ScreenNode,
@@ -148,6 +149,27 @@ export const defaultPropsMap: { [K in ComponentType]: () => NodePropsMap[K] } = 
     value: 65,
     wavy: true,
   }),
+  SearchBar: () => ({
+    placeholder: "Search tasks...",
+    value: "",
+    leadingIcon: "search",
+    showClearButton: true,
+  }),
+  SegmentedButton: () => ({
+    options: [
+      { value: "all", label: "All" },
+      { value: "active", label: "Active" },
+      { value: "done", label: "Done" },
+    ],
+    selectedValue: "all",
+  }),
+  DataList: () => ({
+    collectionKey: "todos",
+    searchFields: ["title", "notes"],
+    gap: 8,
+    emptyTitle: "No items match your filter",
+    emptySubtitle: "Try clearing search or adding a new item.",
+  }),
 };
 
 export function createDefaultStyle(type: ComponentType): ComponentStyle {
@@ -161,6 +183,9 @@ export function createDefaultStyle(type: ComponentType): ComponentStyle {
     case "Card":
       return { width: "fill", padding: uniformSpacing(16) };
     case "TextField":
+    case "SearchBar":
+    case "SegmentedButton":
+    case "DataList":
     case "ListItem":
     case "Divider":
     case "Image":
@@ -178,6 +203,7 @@ export interface CreateNodeOptions<K extends ComponentType> {
   props?: Partial<NodePropsMap[K]>;
   style?: Partial<ComponentStyle>;
   action?: UserAction;
+  bindings?: NodeBindings;
 }
 
 export function createNode<K extends ComponentType>(
@@ -195,6 +221,7 @@ export function createNode<K extends ComponentType>(
     style: { ...baseStyle, ...(opts.style ?? {}) },
     props: { ...baseProps, ...(opts.props ?? {}) },
     action: opts.action,
+    ...(opts.bindings ? { bindings: opts.bindings } : {}),
   } as unknown as NodeOfType<K>;
 }
 
@@ -205,6 +232,7 @@ export interface BlueprintNode {
   props?: Record<string, unknown>;
   style?: Partial<ComponentStyle>;
   action?: UserAction;
+  bindings?: NodeBindings;
   children?: BlueprintNode[];
 }
 
@@ -220,6 +248,7 @@ export function materializeBlueprint(
     props: blueprint.props as never,
     style: blueprint.style,
     action: blueprint.action,
+    bindings: blueprint.bindings,
   });
   nodes[node.id] = node;
   if (blueprint.children?.length) {

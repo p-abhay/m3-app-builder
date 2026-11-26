@@ -1,4 +1,4 @@
-import type { AppProject } from "../../ast/types.ts";
+import type { AppProject, PersistenceBackend } from "../../ast/types.ts";
 import {
   generateComposeProject,
   type ComposeCodegenOptions,
@@ -13,6 +13,7 @@ export interface GradleProjectOptions extends ComposeCodegenOptions {
   minSdk?: number;
   targetSdk?: number;
   compileSdk?: number;
+  persistenceBackend?: PersistenceBackend;
 }
 
 export type GradleFileCategory =
@@ -57,7 +58,7 @@ function slugifyProject(name: string): string {
   return slug || "m3-app";
 }
 
-function buildVersionCatalog(m3Expressive: boolean): string {
+function buildVersionCatalog(m3Expressive: boolean, useDataStore: boolean): string {
   return [
     "[versions]",
     'agp = "8.7.3"',
@@ -67,6 +68,7 @@ function buildVersionCatalog(m3Expressive: boolean): string {
     'composeBom = "2024.12.01"',
     'navigationCompose = "2.8.5"',
     'coroutines = "1.9.0"',
+    ...(useDataStore ? ['datastorePreferences = "1.1.1"'] : []),
     ...(m3Expressive ? ['material3Alpha = "1.4.0-alpha08"'] : []),
     "",
     "[libraries]",
@@ -82,6 +84,9 @@ function buildVersionCatalog(m3Expressive: boolean): string {
     'androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }',
     'androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }',
     'kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }',
+    ...(useDataStore
+      ? ['androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }']
+      : []),
     "",
     "[plugins]",
     'android-application = { id = "com.android.application", version.ref = "agp" }',
@@ -96,6 +101,7 @@ function buildAppGradle(
   minSdk: number,
   targetSdk: number,
   compileSdk: number,
+  useDataStore: boolean,
 ): string {
   return [
     "import org.jetbrains.kotlin.gradle.dsl.JvmTarget",
@@ -154,6 +160,7 @@ function buildAppGradle(
     "    implementation(libs.androidx.material.icons.extended)",
     "    implementation(libs.androidx.navigation.compose)",
     "    implementation(libs.kotlinx.coroutines.android)",
+    ...(useDataStore ? ["    implementation(libs.androidx.datastore.preferences)"] : []),
     "}",
     "",
   ].join("\n");
@@ -267,12 +274,21 @@ export function generateGradleProject(
   const targetSdk = Math.max(minSdk, Math.min(36, options.targetSdk ?? 35));
   const compileSdk = Math.max(targetSdk, options.compileSdk ?? 35);
   const m3Expressive = Boolean(options.m3Expressive);
+  const hasAppState = Boolean(
+    project.state && (project.state.variables.length > 0 || project.state.collections.length > 0),
+  );
+  const persistenceBackend: PersistenceBackend =
+    options.persistenceBackend ?? project.state?.persistenceBackend ?? "datastore";
+  const useDataStore = hasAppState && persistenceBackend === "datastore";
 
   const projectForCompose: AppProject = {
     ...project,
     packageName: effectivePackage,
   };
-  const compose = generateComposeProject(projectForCompose, { m3Expressive });
+  const compose = generateComposeProject(projectForCompose, {
+    m3Expressive,
+    persistenceBackend,
+  });
 
   const appPascal = toPascalCase(project.name, "M3App");
   const themeStyleName = `Theme.${appPascal}`;
@@ -307,7 +323,7 @@ export function generateGradleProject(
       path: "gradle/libs.versions.toml",
       shortName: "libs.versions.toml",
       category: "gradle",
-      content: buildVersionCatalog(m3Expressive),
+      content: buildVersionCatalog(m3Expressive, useDataStore),
     },
     {
       path: "gradle/wrapper/gradle-wrapper.properties",
@@ -328,7 +344,7 @@ export function generateGradleProject(
       path: "app/build.gradle.kts",
       shortName: "app/build.gradle.kts",
       category: "gradle",
-      content: buildAppGradle(compose.packageName, minSdk, targetSdk, compileSdk),
+      content: buildAppGradle(compose.packageName, minSdk, targetSdk, compileSdk, useDataStore),
     },
     {
       path: "app/proguard-rules.pro",

@@ -9,6 +9,7 @@ export function generateNavAndActivityFiles(
   screenNameMap: Map<string, string>,
   routeMap: Map<string, string>,
   diagnostics: ComposeDiagnostic[],
+  hasAppState = false,
 ): GeneratedKotlinFile[] {
   const appPascal = toPascalCase(project.name, "M3App");
   const pkgPath = pkg.replace(/\./g, "/");
@@ -65,6 +66,7 @@ export function generateNavAndActivityFiles(
     return [
       `            composable(${kotlinString(route)}) {`,
       `                ${fnName}(`,
+      ...(hasAppState ? ["                    appState = appState,"] : []),
       "                    onNavigate = { target -> navController.navigate(target) },",
       "                    onNavigateBack = { navController.popBackStack() },",
       "                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },",
@@ -83,6 +85,13 @@ export function generateNavAndActivityFiles(
     "import androidx.compose.material.icons.rounded.*",
     "import androidx.compose.material3.*",
     "import androidx.compose.runtime.*",
+    ...(hasAppState
+      ? [
+          "import androidx.compose.ui.platform.LocalContext",
+          `import ${pkg}.data.createDefaultStateStorage`,
+          `import ${pkg}.ui.state.rememberAppStateStore`,
+        ]
+      : []),
     "import androidx.navigation.compose.NavHost",
     "import androidx.navigation.compose.composable",
     "import androidx.navigation.compose.currentBackStackEntryAsState",
@@ -95,6 +104,13 @@ export function generateNavAndActivityFiles(
     "    val navController = rememberNavController()",
     "    val snackbarHostState = remember { SnackbarHostState() }",
     "    val scope = rememberCoroutineScope()",
+    ...(hasAppState
+      ? [
+          "    val context = LocalContext.current",
+          "    val storage = remember(context) { createDefaultStateStorage(context) }",
+          "    val appState = rememberAppStateStore(storage)",
+        ]
+      : []),
     "    val backStackEntry by navController.currentBackStackEntryAsState()",
     "    val currentRoute = backStackEntry?.destination?.route",
     "",
