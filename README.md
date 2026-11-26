@@ -1,4 +1,4 @@
-# M3 App Builder (`v0.2.0`)
+# M3 App Builder (`v0.3.0`)
 
 A visual, no-code Android UI builder and live **Material 3 Expressive (`M3E`)** design studio built with **React 18, TypeScript, Vite, Tailwind CSS v4, Zustand, `@dnd-kit`, and `motion`**.
 
@@ -10,10 +10,10 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 
 | Version | Scope | Status | Key Deliverables |
 | --- | --- | --- | --- |
-| **`v0.1.0`** | **Visual Android Studio, M3E Theming & Interactive Preview** | **Completed** | Phases 1–5 + Release Notes dialog: M3E theme/system token engine, normalized multi-screen Android AST, 4 starter templates, 22 M3 components, slot-aware DnD & AST tree editor, Property Inspector, Material Symbols picker, and isolated multi-screen runtime preview. |
-| **`v0.2.0`** | **Kotlin + Jetpack Compose Export & Gradle `.zip`** | **Completed (Current)** | Phases 6–7: Kotlin + Jetpack Compose AST compiler (`Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt`, `*Screen.kt`, `AppNavHost.kt`, `MainActivity.kt`), Hybrid Stable M3 + M3 Expressive Alpha toggle, live Android package/SDK configuration, and full Android Studio Gradle `.zip` export. Verified by 17 unit tests and 32 Playwright E2E specs. |
-| **`v0.3.0`** | **State Variables, Data Binding & AI Screen Co-Pilot** | **Planned Next** | Phase 8: Screen/app state variables (`remember { mutableStateOf }`), mock JSON dataset binding, `LazyColumn` list repeaters, conditional visibility, and AI design spec / AST patch bridge. |
-| **`v0.4.0`** | **Adaptive Tablet Layouts & Overlays** | **Roadmap** | Automatic `NavigationBar` → `NavigationRail` adaptation on tablet breakpoints, `ModalBottomSheet`, and `AlertDialog` overlays. |
+| **`v0.1.0`** | **Visual Android Studio, M3E Theming & Interactive Preview** | **Completed** | Phases 1–5 + Release Notes dialog: M3E theme/system token engine, normalized multi-screen Android AST, starter templates, slot-aware DnD & AST tree editor, Property Inspector, Material Symbols picker, and isolated multi-screen runtime preview. |
+| **`v0.2.0`** | **Kotlin + Jetpack Compose Export & Gradle `.zip`** | **Completed** | Phases 6–7: Kotlin + Jetpack Compose AST compiler (`Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt`, `*Screen.kt`, `AppNavHost.kt`, `MainActivity.kt`), Hybrid Stable M3 + M3 Expressive Alpha toggle, live Android package/SDK configuration, and full Android Studio Gradle `.zip` export. |
+| **`v0.3.0`** | **State Variables, Collections, Search/Sort & Pluggable Persistence** | **Completed (Current)** | Phase 8: App state variables & typed collections (**Data** tab), `SearchBar` / `SegmentedButton` / `DataList` components (**25 total**), **Todo & Tasks** CRUD template (**5 total**), two-way data bindings, `localStorage` Preview persistence, and pluggable Android `StateStorage` (`DataStore Preferences` / `SharedPreferences`) + `AppStateStore.kt`. Verified by 22 unit tests and 36 Playwright E2E specs. |
+| **`v0.4.0`** | **AI Screen Co-Pilot & Adaptive Tablet Layouts** | **Planned Next** | Compact AI design spec export / AST patch import, automatic `NavigationBar` → `NavigationRail` adaptation on tablet breakpoints, `ModalBottomSheet`, and `AlertDialog` overlays. |
 | **`v1.0.0`** | **Cloud APK Delivery & GitHub Sync** | **Target 1.0** | Direct GitHub repository export sync, cloud Android APK preview builds, and full Studio 1.0 stability. |
 
 ---
@@ -31,8 +31,9 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 *Files: [`src/ast/`](src/ast/), [`src/store/useProjectStore.ts`](src/store/useProjectStore.ts), [`src/components/TemplatesModal.tsx`](src/components/TemplatesModal.tsx), [`src/components/ProjectJsonModal.tsx`](src/components/ProjectJsonModal.tsx)*
 
 - **Normalized AST (`types.ts`, `factory.ts`, `operations.ts`, `validator.ts`)**: Screens use explicit Android `Scaffold` slots (`topBarId`, `bodyId`, `fabId`) plus a flat `O(1)` `Record<string, ComponentNode>` node map with parent-child ID references and schema validation.
-- **4 Curated Starter Templates (`templates.ts`)**:
+- **5 Curated Starter Templates (`templates.ts`)**:
   - `material-showcase` — 4-screen app with shared bottom navigation, connected button rows, cards, and settings
+  - `todo-app` — 2-screen CRUD task manager with live search, status filter, sort order & persistent storage
   - `settings-app` — Large `TopAppBar` with connected `ListItem` groups, switches, and search
   - `auth-flow` — 2-screen Sign In & Create Account flow with slide transitions
   - `blank` — Single-screen starter with `Scaffold` and `TopAppBar`
@@ -43,27 +44,27 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 
 - **Android Device Frame (`DevicePreview.tsx`)**: Realistic Phone (`Compact`) and `Tablet` viewport switcher with status bar, Android navigation bar chrome, quick-add strip, and scrollable `Scaffold` canvas.
 - **Bidirectional AST Tree & Canvas Selection**: Clicking any element on the device highlights and focuses it in both the **AST Tree** (`Layers`) and the **Properties Inspector** (and vice versa).
-- **Properties Inspector (`PropertiesInspector.tsx`)**: Edit component props (labels, variants, alignment, connected M3E groups, wavy progress, image aspect ratios), spacing (`padding`, `margin`), sizing (`wrap`, `fill`, fixed px), background tokens, corner radius, reorder within parent, duplicate, delete, or bind interactive **User Actions**.
+- **Properties Inspector (`PropertiesInspector.tsx`)**: Edit component props (labels, variants, alignment, connected M3E groups, wavy progress, image aspect ratios), spacing (`padding`, `margin`), sizing (`wrap`, `fill`, fixed px), background tokens, corner radius, reorder within parent, duplicate, delete, bind **Data** variables/item fields, or attach interactive **User Actions**.
 
-### Phase 4: Slot-Aware Drag-and-Drop, Parts Palette, Icon Picker & 22-Component Catalog
+### Phase 4: Slot-Aware Drag-and-Drop, Parts Palette, Icon Picker & 25-Component Catalog
 *Files: [`src/components/dnd/BuilderDndProvider.tsx`](src/components/dnd/BuilderDndProvider.tsx), [`src/components/palette/`](src/components/palette/), [`src/components/inspector/IconPickerModal.tsx`](src/components/inspector/IconPickerModal.tsx), [`src/components/canvas/M3LoadingIndicator.tsx`](src/components/canvas/M3LoadingIndicator.tsx)*
 
-- **Categorized & Searchable Parts Palette (`PartsPalette.tsx`, `paletteCatalog.ts`)**: Browse by 6 categories (`Layout & Containment`, `Actions & Buttons`, `Scaffold Chrome`, `Inputs & Selection`, `Display & Content`, `Progress & M3E`) with click-to-insert or drag-to-drop.
-- **Slot-Aware `@dnd-kit` Reordering & Nesting (`BuilderDndProvider.tsx`)**: Enforces Compose `Scaffold` placement—`TopAppBar` targets `topBarId`, `FloatingActionButton` targets `fabId`, general nodes drop into Body containers (`Column`, `Row`, `Box`, `Card`) or reorder smoothly in the sortable **AST Tree** with cycle protection.
+- **Categorized & Searchable Parts Palette (`PartsPalette.tsx`, `paletteCatalog.ts`)**: Browse categorized M3 components (`Layout & Containment`, `Actions & Buttons`, `Scaffold Chrome`, `Inputs & Selection`, `Display & Content`, `Progress & M3E`) with click-to-insert or drag-to-drop.
+- **Slot-Aware `@dnd-kit` Reordering & Nesting (`BuilderDndProvider.tsx`)**: Enforces Compose `Scaffold` placement—`TopAppBar` targets `topBarId`, `FloatingActionButton` targets `fabId`, general nodes drop into Body containers (`Column`, `Row`, `Box`, `Card`, `DataList`) or reorder smoothly in the sortable **AST Tree** with cycle protection.
 - **Offline-Ready Material Symbols Picker (`IconPickerModal.tsx`, `iconCatalog.ts`)**: Searchable Material Symbols Rounded icon selector wired into buttons, FABs, top bars, list items, and icons.
-- **M3 Expressive Components**: Supports `Column` / `Row` connected groups (`M3E`), shape-morphing `LoadingIndicator`, and wavy/linear `ProgressBar`.
+- **M3 Expressive Components**: Supports `Column` / `Row` connected groups (`M3E`), shape-morphing `LoadingIndicator`, wavy/linear `ProgressBar`, `SearchBar`, `SegmentedButton`, and `DataList`.
 
 ### Phase 5: Isolated Interactive Preview & Multi-Screen Navigation
 *Files: [`src/store/usePreviewStore.ts`](src/store/usePreviewStore.ts), [`src/components/canvas/M3Renderer.tsx`](src/components/canvas/M3Renderer.tsx), [`src/components/DevicePreview.tsx`](src/components/DevicePreview.tsx)*
 
-- **Edit vs. Interactive Preview Mode**: Switching to **Preview** clones runtime interaction state into `usePreviewStore` so typing in `TextField`, toggling `Switch` / `Checkbox` / `Chip` / `IconButton`, or scrubbing `Slider` feels native without altering the design AST or polluting Undo/Redo history.
+- **Edit vs. Interactive Preview Mode**: Switching to **Preview** clones runtime interaction state into `usePreviewStore` so typing in `TextField` / `SearchBar`, toggling `Switch` / `Checkbox` / `Chip` / `IconButton`, selecting `SegmentedButton` options, or scrubbing `Slider` feels native without altering the design AST or polluting Undo/Redo history.
 - **Navigation Back-Stack & Transitions**: Interactive `navigate` (with `slide`, `fade`, `expand`, `none` transitions powered by `motion`), `navigateBack`, shared Bottom Navigation tab switching, and Material 3 `Snackbar` notifications (`showSnackbar`).
 - **Live Theme Experimentation in Preview**: The **Theme & System** sidebar remains active in Preview mode for live light/dark, seed color, font, and shape testing.
 
 ### Studio Info & Release Notes Modal
 *Files: [`src/components/ReleaseNotesModal.tsx`](src/components/ReleaseNotesModal.tsx), [`src/version.ts`](src/version.ts), [`src/App.tsx`](src/App.tsx)*
 
-- Clicking the **`i` info icon** next to the `v0.2.0 Studio` pill in the top header opens the SemVer release modal with **Release Notes** (`v0.2.0` and `v0.1.0`) and **Future** (`v0.3.0` → `v1.0.0` roadmap).
+- Clicking the **`i` info icon** next to the `v0.3.0 Studio` pill in the top header opens the SemVer release modal with **Release Notes** (`v0.3.0`, `v0.2.0`, and `v0.1.0`) and **Future** (`v0.4.0` → `v1.0.0` roadmap).
 
 ---
 
@@ -73,7 +74,7 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 *Files: [`src/codegen/compose/`](src/codegen/compose/), [`src/components/ComposeExportModal.tsx`](src/components/ComposeExportModal.tsx)*
 
 - **Theme Generation (`themeGen.ts`)**: Generates `Color.kt` (all 36 M3 color roles from seed + overrides + contrast level), `Type.kt` (scaled `AppTypography` with emphasized weights and Display/Body font pairing), `Shape.kt` (`AppShapes`), and `Theme.kt` (`dynamicLightColorScheme` / `dynamicDarkColorScheme` + `isSystemInDarkTheme()`).
-- **Screen & Navigation Generation (`screenGen.ts`, `navGen.ts`)**: Compiles `Scaffold` (`TopAppBar`, `Body`, `FAB`, `NavigationBar`), local `remember { mutableStateOf(...) }` interactive state, `Modifier` chains, user actions (`navigate`, `navigateBack`, `showSnackbar`, `openUrl`), `AppNavHost.kt`, `MainActivity.kt` (`enableEdgeToEdge()`), and all 22 AST components.
+- **Screen & Navigation Generation (`screenGen.ts`, `navGen.ts`)**: Compiles `Scaffold` (`TopAppBar`, `Body`, `FAB`, `NavigationBar`), local `remember { mutableStateOf(...) }` interactive state, `Modifier` chains, user actions (`navigate`, `navigateBack`, `showSnackbar`, `openUrl`), `AppNavHost.kt`, `MainActivity.kt` (`enableEdgeToEdge()`), and all AST components.
 - **Hybrid M3 Expressive Mode**: Emits compile-ready Stable Material 3 Compose BOM composables by default with a live **M3 Expressive Alpha APIs** toggle (`LoadingIndicator`, `ContainedLoadingIndicator`, `LinearWavyProgressIndicator`, `MaterialExpressiveTheme`, `MotionScheme`).
 
 ### Phase 7: Android Studio Gradle Project `.zip` Export & SDK Config
@@ -85,16 +86,31 @@ Inspired by Android Jetpack Compose architecture and Material 3 Expressive token
 
 ---
 
-## Supported Material 3 Component Catalog (22 Components)
+## `v0.3.0` Build Phase (Phase 8)
+
+### Phase 8: State Variables, Typed Collections, Search/Sort & Pluggable Android Persistence
+*Files: [`src/ast/state.ts`](src/ast/state.ts), [`src/components/DataStateSidebar.tsx`](src/components/DataStateSidebar.tsx), [`src/codegen/compose/stateGen.ts`](src/codegen/compose/stateGen.ts), [`src/store/usePreviewStore.ts`](src/store/usePreviewStore.ts), [`src/components/canvas/M3Renderer.tsx`](src/components/canvas/M3Renderer.tsx)*
+
+- **Data State Architecture (`ast/state.ts`, `DataStateSidebar.tsx`)**: Manage app-level variables (`string`, `boolean`, `number`, optional persistence flag) and typed record collections (`fields` + seeded `initialItems`) in the new **Data** sidebar tab.
+- **New M3 Components (`SearchBar`, `SegmentedButton`, `DataList`)**:
+  - `SearchBar`: M3 pill search input with two-way `stateKey` binding and optional clear/trailing actions.
+  - `SegmentedButton`: Choice selector (`SingleChoiceSegmentedButtonRow` in Compose) for status filters, priority pickers, and sort toggles.
+  - `DataList`: Repeater container powered by shared `queryCollection` logic (field search, active/done or value filtering, and sorting by `newest`, `oldest`, `az`, `za`, `priority`) plus `{{item.*}}`, `{{state.*}}`, and `{{count.*}}` template interpolation and empty-state customization.
+- **Live CRUD Runtime & Preview Persistence (`usePreviewStore.ts`)**: Supports `setState`, `createItem`, `selectItem`, `updateItem`, `toggleItemField`, and `deleteItem` actions in Interactive Preview with automatic `localStorage` snapshots (`m3_app_builder_runtime_<projectId>`) and one-click **Reset Preview** restoration back to collection seeds.
+- **Pluggable Android `StateStorage` Codegen (`stateGen.ts`, `ComposeExportModal.tsx`)**: Generates `data/StateStorage.kt` (clean `interface StateStorage` with `DataStoreStateStorage` using `androidx.datastore:datastore-preferences` or `SharedPrefsStateStorage`) and `ui/state/AppStateStore.kt` (`org.json` serialization, typed immutable item models, and Compose state actions). Toggle `DataStore` vs. `SharedPreferences` live inside **Data** or **Export Kotlin** (`libs.versions.toml` and `app/build.gradle.kts` update automatically).
+
+---
+
+## Supported Material 3 Component Catalog (25 Components)
 
 Defined in [`src/ast/types.ts`](src/ast/types.ts) and [`src/components/palette/paletteCatalog.ts`](src/components/palette/paletteCatalog.ts):
 
 | Category | Components |
 | --- | --- |
-| **Layout & Containment** | `Column`, `Row`, `Box`, `Card` (`elevated`, `filled`, `outlined`) |
+| **Layout & Containment** | `Column`, `Row`, `Box`, `Card` (`elevated`, `filled`, `outlined`), `DataList` |
 | **Scaffold Chrome** | `TopAppBar` (`small`, `centerAligned`, `medium`, `large`), `FloatingActionButton` (`standard`, `small`, `large`, `extended`) |
-| **Actions & Buttons** | `Button`, `IconButton` |
-| **Inputs & Selection** | `TextField`, `Switch`, `Checkbox`, `Slider`, `Chip` |
+| **Actions & Buttons** | `Button`, `IconButton`, `SegmentedButton` |
+| **Inputs & Selection** | `SearchBar`, `TextField`, `Switch`, `Checkbox`, `Slider`, `Chip` |
 | **Display & Content** | `Text`, `Icon`, `Image`, `ListItem`, `Badge`, `Spacer`, `Divider` |
 | **Progress & M3E** | `LoadingIndicator` (M3E shape-morphing), `ProgressBar` (wavy / standard) |
 
@@ -107,7 +123,7 @@ Defined in [`src/ast/types.ts`](src/ast/types.ts) and [`src/components/palette/p
 - **State Management**: Zustand (`^5.0.3`) with separate design AST store (`useProjectStore`) and isolated preview store (`usePreviewStore`)
 - **Drag & Drop**: `@dnd-kit/core` (`^6.3.1`), `@dnd-kit/sortable` (`^10.0.0`), `@dnd-kit/utilities`
 - **Motion & Transitions**: `motion` (`^13.1.1`)
-- **Testing**: Node native test runner (`node --test --experimental-strip-types`) for AST unit tests + Playwright (`@playwright/test`) for end-to-end verification
+- **Testing**: Node native test runner (`node --test --experimental-strip-types`) for unit tests + Playwright (`@playwright/test`) for end-to-end verification
 
 ---
 
@@ -119,36 +135,39 @@ m3-app-builder/
 │   ├── ast/
 │   │   ├── factory.ts          # Component & blank screen constructors
 │   │   ├── operations.ts       # Pure AST tree mutations (insert, move, duplicate, remove, slot ops)
-│   │   ├── templates.ts        # 4 starter app templates
-│   │   ├── types.ts            # Schema v1 types, 22 ComponentTypes, UserActions, PropsMap
+│   │   ├── state.ts            # Collection query/filter/sort engine & {{item.*}} interpolation
+│   │   ├── templates.ts        # 5 starter app templates (incl. Todo & Tasks)
+│   │   ├── types.ts            # Schema v1 types, 25 ComponentTypes, AppStateConfig, UserActions
 │   │   └── validator.ts        # Runtime JSON & AST integrity validator
 │   ├── codegen/
-│   │   ├── compose/            # Phase 6 Kotlin/Compose compiler (themeGen, screenGen, navGen, utils)
-│   │   ├── gradle/             # Phase 7 Android Studio Gradle scaffold & Version Catalog generator
+│   │   ├── compose/            # Kotlin/Compose compiler (themeGen, screenGen, navGen, stateGen, utils)
+│   │   ├── gradle/             # Android Studio Gradle scaffold & Version Catalog generator
 │   │   └── zip.ts              # Zero-dependency PKZIP binary archiver with CRC-32
 │   ├── components/
-│   │   ├── canvas/             # M3Renderer, M3LoadingIndicator, M3E morph shapes
+│   │   ├── canvas/             # M3Renderer (DataList repeater & bindings), M3LoadingIndicator, M3E shapes
 │   │   ├── dnd/                # BuilderDndProvider (slot-aware collision + DragOverlay)
-│   │   ├── inspector/          # PropertiesInspector, IconPickerModal, iconCatalog
+│   │   ├── inspector/          # PropertiesInspector (bindings + CRUD actions), IconPickerModal, iconCatalog
 │   │   ├── palette/            # PartsPalette, paletteCatalog
-│   │   ├── ComposeExportModal.tsx # Kotlin/Gradle explorer, M3E toggle, SDK config & .zip download
-│   │   ├── DevicePreview.tsx   # Compact Phone / Tablet frame, status bar, Snackbar, Preview bar
-│   │   ├── LeftSidebar.tsx     # Parts, Screens & BottomNav, AST Tree, Tokens tabs
-│   │   ├── RightSidebar.tsx    # Theme & System / Properties Inspector tabs
-│   │   ├── ThemePanel.tsx      # Color presets, dynamic wallpaper, fonts, shapes, density, bars
-│   │   ├── TemplatesModal.tsx  # Starter template browser
-│   │   ├── ProjectJsonModal.tsx# AST JSON import/export modal
-│   │   └── ReleaseNotesModal.tsx # SemVer Release Notes (v0.2.0/v0.1.0) & Future Roadmap modal
+│   │   ├── ComposeExportModal.tsx # Kotlin/Gradle explorer, M3E & Storage toggles, SDK config & .zip download
+│   │   ├── DataStateSidebar.tsx   # App variables, typed collections & Android storage backend editor
+│   │   ├── DevicePreview.tsx      # Compact Phone / Tablet frame, status bar, Snackbar, Preview bar
+│   │   ├── LeftSidebar.tsx        # Parts, Screens & BottomNav, Data, AST Tree, Tokens tabs
+│   │   ├── RightSidebar.tsx       # Theme & System / Properties Inspector tabs
+│   │   ├── ThemePanel.tsx         # Color presets, dynamic wallpaper, fonts, shapes, density, bars
+│   │   ├── TemplatesModal.tsx     # Starter template browser
+│   │   ├── ProjectJsonModal.tsx   # AST JSON import/export modal
+│   │   └── ReleaseNotesModal.tsx  # SemVer Release Notes (v0.3.0/v0.2.0/v0.1.0) & Future Roadmap modal
 │   ├── store/
-│   │   ├── useProjectStore.ts  # Undoable AST + Theme state + localStorage persistence
-│   │   └── usePreviewStore.ts  # Isolated preview runtime state, nav stack & Snackbar
+│   │   ├── useProjectStore.ts  # Undoable AST + Theme + Data State + localStorage persistence
+│   │   └── usePreviewStore.ts  # Isolated preview runtime state, CRUD actions, nav stack & persistence
 │   ├── theme/                  # M3 seed palette generator, fonts, tokens, ThemeContext
-│   └── version.ts              # Pre-1.0 SemVer version constant (0.2.0) synced with package.json
+│   └── version.ts              # Pre-1.0 SemVer version constant (0.3.0) synced with package.json
 └── tests/
     ├── ast.test.ts             # AST schema, tree operations & multi-screen unit tests
     ├── compose.codegen.test.ts # Phase 6 Kotlin + Compose AST compiler unit tests
     ├── gradle.zip.test.ts      # Phase 7 PKZIP, Gradle scaffold & SemVer sync unit tests
-    └── e2e/                    # Playwright specs covering Phases 1–7 & Release Notes
+    ├── state.crud.test.ts      # Phase 8 query/template, Todo template & StateStorage codegen unit tests
+    └── e2e/                    # Playwright specs covering Phases 1–8 & Release Notes
 ```
 
 ---
@@ -180,7 +199,7 @@ npm.cmd run dev
 | `npm run dev` | Start Vite development server |
 | `npm run typecheck` | Run TypeScript type checking (`tsc -b --noEmit`) |
 | `npm run build` | Type-check and build production bundle to `dist/` |
-| `npm test` | Run AST unit & schema tests ([`tests/ast.test.ts`](tests/ast.test.ts)) |
+| `npm test` | Run unit tests across AST, Compose codegen, Gradle/ZIP & CRUD/state suites |
 | `npm run test:e2e` | Run all Playwright E2E suites ([`tests/e2e/`](tests/e2e/)) against `127.0.0.1:4173` |
 | `npm run preview` | Preview the built `dist/` bundle locally |
 
@@ -188,7 +207,7 @@ npm.cmd run dev
 
 ## CI/CD & GitHub Pages Hosting
 
-- **Pull Request Quality Gate ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))**: Runs on PRs targeting `main` (opening, reopening, and every commit pushed to the PR branch) plus manual dispatch. Executes Node 22 typecheck, AST unit tests, production build, and headless Playwright Chromium E2E tests (`Playwright E2E`), uploading traces/reports if any test fails.
+- **Pull Request Quality Gate ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))**: Runs on PRs targeting `main` (opening, reopening, and every commit pushed to the PR branch) plus manual dispatch. Executes Node 22 typecheck, AST/codegen unit tests, production build, and headless Playwright Chromium E2E tests (`Playwright E2E`), uploading traces/reports if any test fails.
 - **GitHub Pages Deployment ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))**: Runs on pushes to `main` (and manual dispatch). Re-runs the full `ci.yml` verification suite first, builds with the repository subpath (`VITE_BASE_PATH`), and deploys to **GitHub Pages** (`https://p-abhay.github.io/m3-app-builder/`).
 - **One-Time GitHub Repo Settings**:
   1. **Settings → Pages → Source**: Select **GitHub Actions**.
@@ -198,6 +217,5 @@ npm.cmd run dev
 
 ## Roadmap Toward `v1.0.0`
 
-1. **`v0.3.0` (Phase 8) — State Variables, Data Binding & AI Co-Pilot**: Screen/app state variables (`remember { mutableStateOf }`), mock JSON dataset binding, `LazyColumn` list repeaters, conditional visibility rules, and AI coding-agent design spec export / AST patch import.
-2. **`v0.4.0` — Adaptive Tablet Layouts & Overlays**: Automatic `NavigationBar` to `NavigationRail` adaptation on tablet breakpoints, plus `ModalBottomSheet` and `AlertDialog` overlays.
-3. **`v1.0.0` — Production GA & Cloud Previews**: GitHub repo export sync, cloud Android APK builds, and full Studio 1.0 stability.
+1. **`v0.4.0` — AI Co-Pilot, Adaptive Tablet Layouts & Overlays**: Compact AI design spec export / validated AST patch import, automatic `NavigationBar` to `NavigationRail` adaptation on tablet breakpoints, plus `ModalBottomSheet` and `AlertDialog` overlays.
+2. **`v1.0.0` — Production GA & Cloud Previews**: GitHub repo export sync, cloud Android APK builds, and full Studio 1.0 stability.

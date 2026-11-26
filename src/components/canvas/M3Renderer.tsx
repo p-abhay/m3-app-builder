@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type MouseEvent } from "react";
+import { createContext, useContext, useMemo, type CSSProperties, type MouseEvent } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -7,7 +7,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CONTAINER_TYPES, type ComponentNode, type ScreenNode } from "@/ast/types";
+import { queryCollection, resolveTemplateString } from "@/ast/state";
+import {
+  CONTAINER_TYPES,
+  type CollectionRecord,
+  type ComponentNode,
+  type ScreenNode,
+} from "@/ast/types";
 import { usePreviewStore } from "@/store/usePreviewStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
@@ -20,6 +26,13 @@ interface M3NodeRendererProps {
   nodeId: string;
   connectedInfo?: { index: number; total: number; axis: "row" | "column" };
 }
+
+interface ItemScope {
+  collectionKey: string;
+  item: CollectionRecord & { id: string };
+}
+
+const ItemScopeContext = createContext<ItemScope | null>(null);
 
 function getPaddingCss(node: ComponentNode): string | undefined {
   const p = node.style.padding;
@@ -56,8 +69,13 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
   const editorMode = useProjectStore((s) => s.editorMode);
 
   const previewValues = usePreviewStore((s) => s.values);
+  const previewCollections = usePreviewStore((s) => s.collections);
   const setPreviewValue = usePreviewStore((s) => s.setValue);
   const executeAction = usePreviewStore((s) => s.executeAction);
+  const itemScope = useContext(ItemScopeContext);
+  const itemCtx = itemScope
+    ? { collectionKey: itemScope.collectionKey, item: itemScope.item }
+    : undefined;
 
   const availableScreenIds = useMemo(
     () => new Set(project.screens.map((s) => s.id)),
@@ -109,12 +127,108 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
   if (!node) return null;
 
   const isSelected = !isPreview && selectedNodeId === node.id;
+  const scopedKey = itemScope ? `${node.id}::${itemScope.item.id}` : node.id;
+
+  const resolveStr = (raw: string): string => {
+    if (!raw.includes("{{")) return raw;
+    return resolveTemplateString(
+      raw,
+      isPreview ? previewValues : {},
+      isPreview ? previewCollections : {},
+      itemScope?.item,
+    );
+  };
+
+  const readBoundString = (fallback: string): string => {
+    if (isPreview) {
+      if (node.bindings?.itemField && itemScope) {
+        return String(itemScope.item[node.bindings.itemField] ?? fallback);
+      }
+      if (node.bindings?.stateKey && node.bindings.stateKey in previewValues) {
+        return String(previewValues[node.bindings.stateKey] ?? "");
+      }
+      if (typeof previewValues[scopedKey] === "string") {
+        return previewValues[scopedKey] as string;
+      }
+    } else if (node.bindings?.itemField && itemScope) {
+      return String(itemScope.item[node.bindings.itemField] ?? fallback);
+    }
+    return fallback;
+  };
+
+  const readBoundBool = (fallback: boolean): boolean => {
+    if (isPreview) {
+      if (node.bindings?.itemField && itemScope) {
+        return Boolean(itemScope.item[node.bindings.itemField]);
+      }
+      if (node.bindings?.stateKey && node.bindings.stateKey in previewValues) {
+        return Boolean(previewValues[node.bindings.stateKey]);
+      }
+      if (typeof previewValues[scopedKey] === "boolean") {
+        return previewValues[scopedKey] as boolean;
+      }
+    } else if (node.bindings?.itemField && itemScope) {
+      return Boolean(itemScope.item[node.bindings.itemField]);
+    }
+    return fallback;
+  };
+
+  const readBoundNumber = (fallback: number): number => {
+    if (isPreview) {
+      if (node.bindings?.itemField && itemScope) {
+        const n = Number(itemScope.item[node.bindings.itemField]);
+        if (!Number.isNaN(n)) return n;
+      }
+      if (node.bindings?.stateKey && node.bindings.stateKey in previewValues) {
+        const n = Number(previewValues[node.bindings.stateKey]);
+        if (!Number.isNaN(n)) return n;
+      }
+      if (typeof previewValues[scopedKey] === "number") {
+        return previewValues[scopedKey] as number;
+      }
+    }
+    return fallback;
+  };
+
+  const writeBoundValue = (val: string | boolean | number) => {
+    if (node.bindings?.stateKey) {
+      setPreviewValue(node.bindings.stateKey, val);
+    } else {
+      setPreviewValue(scopedKey, val);
+    }
+  };
+
+  const triggerBoundToggle = (current: boolean) => {
+    if (node.bindings?.itemField && itemScope) {
+      if (node.action?.type === "toggleItemField") {
+        executeAction(node.action, availableScreenIds, itemCtx);
+        return;
+      }
+      executeAction(
+        {
+          type: "toggleItemField",
+          collectionKey: itemScope.collectionKey,
+          field: node.bindings.itemField,
+        },
+        availableScreenIds,
+        itemCtx,
+      );
+      if (node.action && node.action.type !== "none") {
+        executeAction(node.action, availableScreenIds, itemCtx);
+      }
+      return;
+    }
+    writeBoundValue(!current);
+    if (node.action && node.action.type !== "none") {
+      executeAction(node.action, availableScreenIds, itemCtx);
+    }
+  };
 
   const handleNodeClick = (e: MouseEvent) => {
     if (isPreview) {
       if (node.action && node.action.type !== "none") {
         e.stopPropagation();
-        executeAction(node.action, availableScreenIds);
+        executeAction(node.action, availableScreenIds, itemCtx);
       }
       return;
     }
@@ -186,6 +300,8 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
   switch (node.type) {
     case "TopAppBar": {
       const { variant, title, subtitle, navigationIcon, navigationAction, actions } = node.props;
+      const resolvedTitle = resolveStr(title);
+      const resolvedSubtitle = subtitle ? resolveStr(subtitle) : undefined;
       const isLarge = variant === "large" || variant === "medium";
       const isCentered = variant === "centerAligned";
       return (
@@ -210,7 +326,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
                     data-testid="topbar-nav-button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      executeAction(navigationAction, availableScreenIds);
+                      executeAction(navigationAction, availableScreenIds, itemCtx);
                     }}
                     className="m3-press w-9 h-9 flex items-center justify-center shrink-0 border-0 cursor-pointer"
                     style={{
@@ -237,14 +353,14 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
               {!isLarge && !isCentered && (
                 <div className="min-w-0">
                   <div className="truncate" style={typeStyle("titleLarge")}>
-                    {title}
+                    {resolvedTitle}
                   </div>
-                  {subtitle && (
+                  {resolvedSubtitle && (
                     <div
                       className="truncate"
                       style={{ ...typeStyle("labelSmall"), color: palette.onSurfaceVariant }}
                     >
-                      {subtitle}
+                      {resolvedSubtitle}
                     </div>
                   )}
                 </div>
@@ -253,7 +369,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
 
             {isCentered && (
               <div className="text-center truncate flex-1" style={typeStyle("titleLarge")}>
-                {title}
+                {resolvedTitle}
               </div>
             )}
 
@@ -265,7 +381,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      executeAction(act.action, availableScreenIds);
+                      executeAction(act.action, availableScreenIds, itemCtx);
                     }}
                     className="m3-press w-9 h-9 flex items-center justify-center border-0 cursor-pointer"
                     style={{
@@ -302,11 +418,11 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
                 className="truncate"
                 style={typeStyle(variant === "large" ? "headlineMedium" : "headlineSmall")}
               >
-                {title}
+                {resolvedTitle}
               </div>
-              {subtitle && (
+              {resolvedSubtitle && (
                 <div style={{ ...typeStyle("bodySmall"), color: palette.onSurfaceVariant }}>
-                  {subtitle}
+                  {resolvedSubtitle}
                 </div>
               )}
             </div>
@@ -378,7 +494,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
                 }
               : handleNodeClick
           }
-          className={`flex flex-col ${isBodyRoot && scrollable ? "no-scrollbar flex-1 overflow-y-auto" : ""}`}
+          className={`flex flex-col ${isBodyRoot && scrollable ? "no-scrollbar flex-1 overflow-y-auto" : ""} ${!isBodyRoot && (!isPreview || (node.action && node.action.type !== "none")) ? "cursor-pointer" : ""}`}
           style={{
             gap: connected ? 3 : gap ?? spacing.itemGap,
             alignItems: alignMap[horizontalAlignment] ?? "stretch",
@@ -583,7 +699,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
             ...selectionRingStyle,
           }}
         >
-          {text}
+          {resolveStr(text)}
         </div>
       );
     }
@@ -627,7 +743,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
             ...selectionRingStyle,
           }}
         >
-          {label}
+          {resolveStr(label)}
         </span>
       );
     }
@@ -680,14 +796,14 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           }}
         >
           {icon && <Icon name={icon} size={18} />}
-          <span className="truncate">{label}</span>
+          <span className="truncate">{resolveStr(label)}</span>
         </button>
       );
     }
 
     case "IconButton": {
       const { icon, variant, toggleable, selectedIcon } = node.props;
-      const activeToggle = isPreview && toggleable && Boolean(previewValues[node.id]);
+      const activeToggle = isPreview && toggleable && Boolean(previewValues[scopedKey]);
       const styles: Record<typeof variant, CSSProperties> = {
         standard: {
           backgroundColor: activeToggle ? palette.primaryContainer : "transparent",
@@ -714,8 +830,8 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           onClick={(e) => {
             if (isPreview) {
               e.stopPropagation();
-              if (toggleable) setPreviewValue(node.id, !activeToggle);
-              executeAction(node.action, availableScreenIds);
+              if (toggleable) setPreviewValue(scopedKey, !activeToggle);
+              executeAction(node.action, availableScreenIds, itemCtx);
               return;
             }
             handleNodeClick(e);
@@ -737,10 +853,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
       const { label, placeholder, value, variant, leadingIcon, trailingIcon, supportingText } =
         node.props;
       const isFilled = variant === "filled";
-      const liveValue =
-        isPreview && typeof previewValues[node.id] === "string"
-          ? (previewValues[node.id] as string)
-          : value;
+      const liveValue = readBoundString(value);
 
       return (
         <div
@@ -772,7 +885,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
                   aria-label={label}
                   value={liveValue}
                   placeholder={placeholder}
-                  onChange={(e) => setPreviewValue(node.id, e.target.value)}
+                  onChange={(e) => writeBoundValue(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   className="w-full bg-transparent outline-none border-0 p-0"
                   style={{
@@ -801,7 +914,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
               className="px-3.5 pt-1"
               style={{ ...typeStyle("bodySmall"), color: palette.onSurfaceVariant }}
             >
-              {supportingText}
+              {resolveStr(supportingText)}
             </div>
           )}
         </div>
@@ -810,10 +923,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
 
     case "Switch": {
       const { label, checked, showCheckIcon } = node.props;
-      const isChecked =
-        isPreview && typeof previewValues[node.id] === "boolean"
-          ? (previewValues[node.id] as boolean)
-          : checked;
+      const isChecked = readBoundBool(checked);
 
       return (
         <div
@@ -822,7 +932,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           onClick={(e) => {
             if (isPreview) {
               e.stopPropagation();
-              setPreviewValue(node.id, !isChecked);
+              triggerBoundToggle(isChecked);
               return;
             }
             handleNodeClick(e);
@@ -830,7 +940,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           className="w-full flex items-center justify-between gap-3 py-1 cursor-pointer"
           style={{ ...dndTransformStyle, ...selectionRingStyle }}
         >
-          <span style={typeStyle("bodyMedium")}>{label}</span>
+          <span style={typeStyle("bodyMedium")}>{resolveStr(label)}</span>
           <span
             role="switch"
             aria-checked={isChecked}
@@ -857,10 +967,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
 
     case "Checkbox": {
       const { label, checked } = node.props;
-      const isChecked =
-        isPreview && typeof previewValues[node.id] === "boolean"
-          ? (previewValues[node.id] as boolean)
-          : checked;
+      const isChecked = readBoundBool(checked);
 
       return (
         <div
@@ -869,7 +976,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           onClick={(e) => {
             if (isPreview) {
               e.stopPropagation();
-              setPreviewValue(node.id, !isChecked);
+              triggerBoundToggle(isChecked);
               return;
             }
             handleNodeClick(e);
@@ -890,17 +997,14 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           >
             {isChecked && <Icon name="check" size={15} />}
           </span>
-          <span style={typeStyle("bodyMedium")}>{label}</span>
+          {label && <span style={typeStyle("bodyMedium")}>{resolveStr(label)}</span>}
         </div>
       );
     }
 
     case "Slider": {
       const { label, value, min, max } = node.props;
-      const liveVal =
-        isPreview && typeof previewValues[node.id] === "number"
-          ? (previewValues[node.id] as number)
-          : value;
+      const liveVal = readBoundNumber(value);
       const pct = Math.max(0, Math.min(100, ((liveVal - min) / Math.max(1, max - min)) * 100));
 
       return (
@@ -912,7 +1016,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           style={{ ...dndTransformStyle, ...selectionRingStyle }}
         >
           <div className="flex items-center justify-between">
-            <span style={typeStyle("labelMedium")}>{label}</span>
+            <span style={typeStyle("labelMedium")}>{resolveStr(label)}</span>
             <span style={{ ...typeStyle("labelMedium"), color: palette.primary }}>{liveVal}</span>
           </div>
           {isPreview ? (
@@ -922,7 +1026,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
               min={min}
               max={max}
               value={liveVal}
-              onChange={(e) => setPreviewValue(node.id, Number(e.target.value))}
+              onChange={(e) => writeBoundValue(Number(e.target.value))}
               onClick={(e) => e.stopPropagation()}
               className="m3-range"
               style={
@@ -949,10 +1053,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
 
     case "Chip": {
       const { label, icon, selected } = node.props;
-      const isSelectedChip =
-        isPreview && typeof previewValues[node.id] === "boolean"
-          ? (previewValues[node.id] as boolean)
-          : selected;
+      const isSelectedChip = readBoundBool(selected);
 
       return (
         <span
@@ -961,8 +1062,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           onClick={(e) => {
             if (isPreview) {
               e.stopPropagation();
-              setPreviewValue(node.id, !isSelectedChip);
-              executeAction(node.action, availableScreenIds);
+              triggerBoundToggle(isSelectedChip);
               return;
             }
             handleNodeClick(e);
@@ -981,7 +1081,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
           {(isSelectedChip || icon) && (
             <Icon name={isSelectedChip ? "check" : icon!} size={16} />
           )}
-          <span>{label}</span>
+          <span>{resolveStr(label)}</span>
         </span>
       );
     }
@@ -997,10 +1097,10 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
         trailingIcon,
         checked,
       } = node.props;
-      const isChecked =
-        isPreview && typeof previewValues[node.id] === "boolean"
-          ? (previewValues[node.id] as boolean)
-          : Boolean(checked);
+      const isChecked = readBoundBool(Boolean(checked));
+      const resolvedHeadline = resolveStr(headline);
+      const resolvedSupporting = supportingText ? resolveStr(supportingText) : undefined;
+      const resolvedOverline = overlineText ? resolveStr(overlineText) : undefined;
 
       return (
         <div
@@ -1010,9 +1110,10 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
             if (isPreview) {
               e.stopPropagation();
               if (trailingType === "switch" || trailingType === "checkbox") {
-                setPreviewValue(node.id, !isChecked);
+                triggerBoundToggle(isChecked);
+              } else {
+                executeAction(node.action, availableScreenIds, itemCtx);
               }
-              executeAction(node.action, availableScreenIds);
               return;
             }
             handleNodeClick(e);
@@ -1045,23 +1146,23 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
               </div>
             )}
             <div className="min-w-0">
-              {overlineText && (
+              {resolvedOverline && (
                 <div
                   className="truncate"
                   style={{ ...typeStyle("labelSmall"), color: palette.onSurfaceVariant }}
                 >
-                  {overlineText}
+                  {resolvedOverline}
                 </div>
               )}
               <div className="truncate" style={typeStyle("bodyLarge")}>
-                {headline}
+                {resolvedHeadline}
               </div>
-              {supportingText && (
+              {resolvedSupporting && (
                 <div
                   className="truncate"
                   style={{ ...typeStyle("bodyMedium"), color: palette.onSurfaceVariant }}
                 >
-                  {supportingText}
+                  {resolvedSupporting}
                 </div>
               )}
             </div>
@@ -1209,6 +1310,282 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
             wavy={wavy}
             value={determinate ? value / 100 : undefined}
           />
+        </div>
+      );
+    }
+
+    case "SearchBar": {
+      const { placeholder, value, leadingIcon, showClearButton, trailingIcon, trailingAction } =
+        node.props;
+      const liveQuery = readBoundString(value);
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={handleNodeClick}
+          className={`flex items-center gap-2.5 px-4 h-12 ${!isPreview ? "cursor-pointer" : ""}`}
+          style={{
+            width: node.style.width === "fill" ? "100%" : undefined,
+            borderRadius: shapes.full,
+            backgroundColor: resolveBg(node.style.backgroundToken, palette) ?? palette.surfaceContainerHigh,
+            color: palette.onSurface,
+            ...dndTransformStyle,
+            ...selectionRingStyle,
+          }}
+        >
+          <Icon name={leadingIcon || "search"} size={20} color={palette.onSurfaceVariant} />
+          {isPreview ? (
+            <input
+              type="text"
+              aria-label={placeholder || "Search"}
+              placeholder={placeholder}
+              value={liveQuery}
+              onChange={(e) => writeBoundValue(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 min-w-0 bg-transparent outline-none border-0 p-0"
+              style={{
+                ...typeStyle("bodyLarge"),
+                color: palette.onSurface,
+              }}
+            />
+          ) : (
+            <span
+              className="flex-1 min-w-0 truncate"
+              style={{
+                ...typeStyle("bodyLarge"),
+                color: value ? palette.onSurface : palette.onSurfaceVariant,
+              }}
+            >
+              {value || placeholder}
+            </span>
+          )}
+          {isPreview && showClearButton && liveQuery && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={(e) => {
+                e.stopPropagation();
+                writeBoundValue("");
+              }}
+              className="w-7 h-7 flex items-center justify-center border-0 bg-transparent cursor-pointer shrink-0"
+              style={{ borderRadius: shapes.full, color: palette.onSurfaceVariant }}
+            >
+              <Icon name="close" size={18} />
+            </button>
+          )}
+          {trailingIcon &&
+            (isPreview ? (
+              <button
+                type="button"
+                aria-label="Search action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  executeAction(trailingAction, availableScreenIds, itemCtx);
+                }}
+                className="w-7 h-7 flex items-center justify-center border-0 bg-transparent cursor-pointer shrink-0"
+                style={{ borderRadius: shapes.full, color: palette.onSurfaceVariant }}
+              >
+                <Icon name={trailingIcon} size={18} />
+              </button>
+            ) : (
+              <Icon name={trailingIcon} size={18} color={palette.onSurfaceVariant} />
+            ))}
+        </div>
+      );
+    }
+
+    case "SegmentedButton": {
+      const { options, selectedValue } = node.props;
+      const currentSelected = readBoundString(selectedValue);
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={handleNodeClick}
+          role="group"
+          className={`flex items-stretch overflow-hidden ${!isPreview ? "cursor-pointer" : ""}`}
+          style={{
+            width: node.style.width === "fill" ? "100%" : undefined,
+            height: 36,
+            borderRadius: shapes.full,
+            border: `1px solid ${palette.outline}`,
+            ...dndTransformStyle,
+            ...selectionRingStyle,
+          }}
+        >
+          {options.map((opt, idx) => {
+            const active = currentSelected === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={active}
+                onClick={(e) => {
+                  if (isPreview) {
+                    e.stopPropagation();
+                    writeBoundValue(opt.value);
+                    if (node.action && node.action.type !== "none") {
+                      executeAction(node.action, availableScreenIds, itemCtx);
+                    }
+                    return;
+                  }
+                  handleNodeClick(e);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 border-0 cursor-pointer transition-colors min-w-0"
+                style={{
+                  ...typeStyle("labelLarge"),
+                  backgroundColor: active ? palette.secondaryContainer : "transparent",
+                  color: active ? palette.onSecondaryContainer : palette.onSurface,
+                  borderRight:
+                    idx < options.length - 1 ? `1px solid ${palette.outline}` : "none",
+                }}
+              >
+                {(active || opt.icon) && (
+                  <Icon name={active ? "check" : opt.icon!} size={15} />
+                )}
+                <span className="truncate">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    case "DataList": {
+      const {
+        collectionKey,
+        searchStateKey,
+        searchFields,
+        filterField,
+        filterStateKey,
+        sortStateKey,
+        gap,
+        emptyTitle,
+        emptySubtitle,
+      } = node.props;
+      const colSchema = project.state?.collections.find((c) => c.key === collectionKey);
+
+      if (isPreview) {
+        const rawItems = previewCollections[collectionKey] ?? [];
+        const filtered = queryCollection(rawItems, {
+          searchQuery: searchStateKey ? String(previewValues[searchStateKey] ?? "") : "",
+          searchFields,
+          filterField,
+          filterValue: filterStateKey ? String(previewValues[filterStateKey] ?? "") : "",
+          sortBy: sortStateKey ? String(previewValues[sortStateKey] ?? "") : "",
+        });
+
+        return (
+          <div
+            ref={setMergedRef}
+            {...commonAttrs}
+            onClick={handleNodeClick}
+            className="flex flex-col"
+            style={{
+              width: node.style.width === "fill" ? "100%" : undefined,
+              gap: gap ?? spacing.itemGap,
+              padding: getPaddingCss(node),
+              backgroundColor: resolveBg(node.style.backgroundToken, palette),
+              borderRadius: node.style.cornerRadius,
+            }}
+          >
+            {filtered.length === 0 ? (
+              <div
+                className="p-5 flex flex-col items-center justify-center text-center border border-dashed"
+                style={{
+                  borderRadius: shapes.large,
+                  borderColor: palette.outlineVariant,
+                  color: palette.onSurfaceVariant,
+                }}
+              >
+                <Icon name="inbox" size={26} />
+                <div className="mt-1.5" style={typeStyle("titleSmall")}>
+                  {emptyTitle || "No items"}
+                </div>
+                {emptySubtitle && (
+                  <div className="mt-0.5 opacity-80" style={typeStyle("bodySmall")}>
+                    {emptySubtitle}
+                  </div>
+                )}
+              </div>
+            ) : (
+              filtered.map((item) => (
+                <ItemScopeContext.Provider
+                  key={item.id}
+                  value={{ collectionKey, item }}
+                >
+                  {node.childIds.map((cid) => (
+                    <M3NodeRenderer
+                      key={`${item.id}:${cid}`}
+                      screen={screen}
+                      nodeId={cid}
+                    />
+                  ))}
+                </ItemScopeContext.Provider>
+              ))
+            )}
+          </div>
+        );
+      }
+
+      const sampleItem = colSchema?.initialItems[0] ?? null;
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={handleNodeClick}
+          className="flex flex-col cursor-pointer"
+          style={{
+            width: node.style.width === "fill" ? "100%" : undefined,
+            gap: gap ?? spacing.itemGap,
+            padding: getPaddingCss(node) ?? "6px",
+            backgroundColor:
+              resolveBg(node.style.backgroundToken, palette) ??
+              `${palette.surfaceContainerLow}80`,
+            borderRadius: node.style.cornerRadius ?? shapes.medium,
+            ...dndTransformStyle,
+            ...selectionRingStyle,
+          }}
+        >
+          <div
+            className="flex items-center justify-between text-[10px] font-semibold px-1"
+            style={{ color: palette.primary }}
+          >
+            <span>DataList • {collectionKey}</span>
+            <span style={{ color: palette.onSurfaceVariant }}>
+              {colSchema ? `${colSchema.initialItems.length} seed` : "collection"}
+            </span>
+          </div>
+          {node.childIds.length === 0 ? (
+            <div
+              className="min-h-[84px] flex flex-col items-center justify-center text-center p-3 border border-dashed"
+              style={{
+                borderRadius: shapes.medium,
+                borderColor: palette.outlineVariant,
+                color: palette.onSurfaceVariant,
+              }}
+            >
+              <Icon name="view_list" size={20} />
+              <span className="text-[11px] font-medium mt-1">
+                Drop a Card or ListItem item template
+              </span>
+            </div>
+          ) : (
+            <ItemScopeContext.Provider
+              value={sampleItem ? { collectionKey, item: sampleItem } : null}
+            >
+              <SortableContext
+                items={node.childIds.map((cid) => `canvas:${cid}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                {node.childIds.map((cid) => (
+                  <M3NodeRenderer key={cid} screen={screen} nodeId={cid} />
+                ))}
+              </SortableContext>
+            </ItemScopeContext.Provider>
+          )}
         </div>
       );
     }

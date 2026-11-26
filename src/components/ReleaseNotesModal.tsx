@@ -25,8 +25,43 @@ interface ReleaseGroup {
 const RELEASE_GROUPS: ReleaseGroup[] = [
   {
     version: APP_MILESTONE_LABEL,
-    subtitle: "Kotlin + Jetpack Compose Export & Android Studio Gradle Project",
+    subtitle: "State Variables, Collections, Search/Sort & Pluggable Persistence",
     isCurrent: true,
+    items: [
+      {
+        title: "State Variables, Collections & CRUD Runtime",
+        icon: "database",
+        tag: "Phase 8",
+        points: [
+          "Dedicated Data sidebar tab to define app variables, typed collection schemas, seed records, and choose the Android persistence backend.",
+          "Added the Todo & Tasks (todo-app) 2-screen starter template showcasing live search, status filter, sort order, quick add, detail editing, and deletion.",
+          "Interactive Preview executes createItem, selectItem, updateItem, toggleItemField, and deleteItem actions with automatic localStorage persistence and Reset Preview seed restore, plus {{item.*}}, {{state.*}}, and {{count.*}} interpolation.",
+        ],
+      },
+      {
+        title: "SearchBar, SegmentedButton & DataList Components",
+        icon: "widgets",
+        tag: "Phase 8",
+        points: [
+          "Expanded the studio catalog to 25 Material 3 components with SearchBar, SingleChoice SegmentedButton, and DataList item repeaters.",
+          "Two-way Data Binding (stateKey / itemField) and CRUD Interaction Action editors integrated directly in the Properties Inspector.",
+          "Compiles DataList repeaters to Compose LazyColumn / keyed Column loops alongside native M3 SearchBar and SingleChoiceSegmentedButtonRow composables.",
+        ],
+      },
+      {
+        title: "Pluggable Android StateStorage (DataStore & SharedPreferences)",
+        icon: "storage",
+        tag: "Export",
+        points: [
+          "Generates data/StateStorage.kt (interface StateStorage, DataStoreStateStorage, SharedPrefsStateStorage) and ui/state/AppStateStore.kt using org.json without annotation-processor overhead.",
+          "Switch between Jetpack DataStore Preferences and SharedPreferences directly in the Data tab or Export Kotlin modal with automatic libs.versions.toml dependency syncing.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "v0.2.0",
+    subtitle: "Kotlin + Jetpack Compose Export & Android Studio Gradle Project",
     items: [
       {
         title: "Kotlin + Jetpack Compose AST Compiler",
@@ -99,18 +134,9 @@ const RELEASE_GROUPS: ReleaseGroup[] = [
 
 const FUTURE_ROADMAP: FeatureItem[] = [
   {
-    title: "State Variables, JSON Data Binding & LazyColumn Repeaters",
-    icon: "data_object",
-    tag: "v0.3.0 • Next",
-    points: [
-      "Define app and screen variables to bind Text, ListItems, Switches, and conditional visibility rules in Preview and compiled remember { mutableStateOf(...) } Kotlin.",
-      "Bind Card and ListItem templates to mock JSON arrays compiling to Jetpack Compose LazyColumn items(...).",
-    ],
-  },
-  {
     title: "AI Screen Co-Pilot & Design Spec Bridge",
     icon: "auto_awesome",
-    tag: "v0.3.0 • Next",
+    tag: "v0.4.0 • Next",
     points: [
       "One-click Copy AI Spec exporting compact AST/token contracts for coding agents, plus validated AST patch import with Undo.",
     ],

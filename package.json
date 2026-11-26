@@ -1,12 +1,12 @@
 {
   "name": "m3-app-builder",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --test --experimental-strip-types tests/ast.test.ts tests/compose.codegen.test.ts tests/gradle.zip.test.ts",
+    "test": "node --test --experimental-strip-types tests/ast.test.ts tests/compose.codegen.test.ts tests/gradle.zip.test.ts tests/state.crud.test.ts",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b --noEmit",
     "preview": "vite preview"

@@ -80,6 +80,38 @@ export function buildScreenRouteMap(screens: ScreenNode[]): Map<string, string> 
   return map;
 }
 
+/** Convert a template string containing `{{item.field}}`, `{{state.key}}`, or `{{count.col}}` into a safe Kotlin literal. */
+export function kotlinTemplateString(value: string, hasAppState: boolean, inItemScope: boolean): string {
+  if (!value.includes("{{")) return kotlinString(value);
+  const parts = value.split(/(\{\{\s*[a-zA-Z0-9_.-]+\s*\}\})/g);
+  const out = parts
+    .map((part) => {
+      const match = /^\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}$/.exec(part);
+      if (!match) {
+        return part
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"')
+          .replace(/\$/g, "\\$")
+          .replace(/\r/g, "")
+          .replace(/\n/g, "\\n")
+          .replace(/\t/g, "\\t");
+      }
+      const expr = match[1];
+      if (expr.startsWith("item.") && inItemScope) {
+        return `\${item.${toCamelCase(expr.slice(5))}}`;
+      }
+      if (expr.startsWith("state.") && hasAppState) {
+        return `\${appState.${toCamelCase(expr.slice(6), "stateVar")}}`;
+      }
+      if (expr.startsWith("count.") && hasAppState) {
+        return `\${appState.${toCamelCase(expr.slice(6), "items")}.size}`;
+      }
+      return part.replace(/\$/g, "\\$");
+    })
+    .join("");
+  return `"${out}"`;
+}
+
 /** Escape a JS string cleanly into a Kotlin double-quoted string literal. */
 export function kotlinString(value: string): string {
   const escaped = value
@@ -272,13 +304,31 @@ export function buildModifierExpr(
   return parts.length === 0 ? "Modifier" : `Modifier${parts.join("")}`;
 }
 
+export interface ActionContextOptions {
+  hasAppState?: boolean;
+  inItemScope?: boolean;
+  variableDefaults?: Map<string, string | boolean | number>;
+}
+
 /** Emit a Kotlin action statement list for a `UserAction` inside callbacks (`onClick`). */
 export function actionStatements(
   action: UserAction | undefined,
   routeMap: Map<string, string>,
   onBrokenNav?: (targetScreenId: string) => void,
+  opts: ActionContextOptions = {},
 ): string[] {
   if (!action || action.type === "none") return [];
+  const hasAppState = Boolean(opts.hasAppState);
+  const inItemScope = Boolean(opts.inItemScope);
+
+  const resetExpr = (stateKey: string): string => {
+    const def = opts.variableDefaults?.get(stateKey);
+    const prop = `appState.${toCamelCase(stateKey, "stateVar")}`;
+    if (typeof def === "boolean") return `${prop} = ${def ? "true" : "false"}`;
+    if (typeof def === "number") return `${prop} = ${def}f`;
+    return `${prop} = ${kotlinString(typeof def === "string" ? def : "")}`;
+  };
+
   switch (action.type) {
     case "navigate": {
       const targetRoute = routeMap.get(action.targetScreenId);
@@ -295,7 +345,100 @@ export function actionStatements(
     case "openUrl":
       return [`uriHandler.openUri(${kotlinString(action.url)})`];
     case "toggleState":
+      if (hasAppState && action.stateKey) {
+        const prop = `appState.${toCamelCase(action.stateKey, "stateVar")}`;
+        return [`${prop} = !${prop}`, "appState.notifyChanged()"];
+      }
       return [`onShowSnackbar("State toggled")`];
+    case "setState":
+      if (!hasAppState) return [`onShowSnackbar("State updated")`];
+      {
+        const prop = `appState.${toCamelCase(action.stateKey, "stateVar")}`;
+        const val =
+          typeof action.value === "boolean"
+            ? (action.value ? "true" : "false")
+            : typeof action.value === "number"
+              ? `${action.value}f`
+              : kotlinString(action.value);
+        return [`${prop} = ${val}`, "appState.notifyChanged()"];
+      }
+    case "createItem": {
+      if (!hasAppState) return [];
+      const colPascal = toPascalCase(action.collectionKey, "Items");
+      const args = Object.entries(action.fieldFromState).map(([fKey, sKey]) => {
+        const sProp = `appState.${toCamelCase(sKey, "stateVar")}`;
+        return `${toCamelCase(fKey)} = ${typeof sProp === "string" ? `${sProp}.trim()` : sProp}`;
+      });
+      const stmts = [`appState.create${colPascal}(${args.join(", ")})`];
+      for (const ck of action.clearStateKeys ?? []) stmts.push(resetExpr(ck));
+      if (action.snackbarMessage) stmts.push(`onShowSnackbar(${kotlinString(action.snackbarMessage)})`);
+      if (action.navigateBackAfter) stmts.push("onNavigateBack()");
+      return stmts;
+    }
+    case "selectItem": {
+      if (!hasAppState) return [];
+      const targetProp = `appState.${toCamelCase(action.targetStateKey, "stateVar")}`;
+      const stmts: string[] = [];
+      if (inItemScope) {
+        stmts.push(`${targetProp} = item.id`);
+        for (const [sKey, fKey] of Object.entries(action.populateState ?? {})) {
+          stmts.push(
+            `appState.${toCamelCase(sKey, "stateVar")} = item.${toCamelCase(fKey)}`,
+          );
+        }
+      } else {
+        stmts.push(`${targetProp} = ""`);
+        for (const sKey of Object.keys(action.populateState ?? {})) {
+          stmts.push(resetExpr(sKey));
+        }
+      }
+      if (action.targetScreenId) {
+        const route = routeMap.get(action.targetScreenId);
+        if (route) stmts.push(`onNavigate(${kotlinString(route)})`);
+      }
+      return stmts;
+    }
+    case "updateItem": {
+      if (!hasAppState) return [];
+      const colPascal = toPascalCase(action.collectionKey, "Items");
+      const idExpr = action.idStateKey
+        ? `appState.${toCamelCase(action.idStateKey, "stateVar")}`
+        : inItemScope
+          ? "item.id"
+          : '""';
+      const args = Object.entries(action.fieldFromState).map(
+        ([fKey, sKey]) => `${toCamelCase(fKey)} = appState.${toCamelCase(sKey, "stateVar")}.trim()`,
+      );
+      const stmts = [`appState.upsert${colPascal}(id = ${idExpr}, ${args.join(", ")})`];
+      for (const ck of action.clearStateKeys ?? []) stmts.push(resetExpr(ck));
+      if (action.snackbarMessage) stmts.push(`onShowSnackbar(${kotlinString(action.snackbarMessage)})`);
+      if (action.navigateBackAfter) stmts.push("onNavigateBack()");
+      return stmts;
+    }
+    case "toggleItemField": {
+      if (!hasAppState) return [];
+      const colPascal = toPascalCase(action.collectionKey, "Items");
+      const idExpr = action.idStateKey
+        ? `appState.${toCamelCase(action.idStateKey, "stateVar")}`
+        : inItemScope
+          ? "item.id"
+          : '""';
+      return [`appState.toggle${colPascal}Field(id = ${idExpr}, field = ${kotlinString(action.field)})`];
+    }
+    case "deleteItem": {
+      if (!hasAppState) return [];
+      const colPascal = toPascalCase(action.collectionKey, "Items");
+      const idExpr = action.idStateKey
+        ? `appState.${toCamelCase(action.idStateKey, "stateVar")}`
+        : inItemScope
+          ? "item.id"
+          : '""';
+      const stmts = [`appState.delete${colPascal}(id = ${idExpr})`];
+      if (action.idStateKey) stmts.push(resetExpr(action.idStateKey));
+      if (action.snackbarMessage) stmts.push(`onShowSnackbar(${kotlinString(action.snackbarMessage)})`);
+      if (action.navigateBackAfter) stmts.push("onNavigateBack()");
+      return stmts;
+    }
   }
 }
 

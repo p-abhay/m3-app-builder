@@ -8,9 +8,10 @@ import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
 import { Icon } from "./Icon";
 import { PartsPalette } from "./palette/PartsPalette";
+import { DataStateSidebar } from "./DataStateSidebar";
 import { TokenInspectorSidebar } from "./TokenInspectorSidebar";
 
-type LeftTab = "parts" | "screens" | "tree" | "tokens";
+type LeftTab = "parts" | "screens" | "data" | "tree" | "tokens";
 
 function TreeNodeItem({
   screen,
@@ -215,13 +216,14 @@ export function LeftSidebar() {
       {/* Top Tab Bar */}
       <div className="p-2 border-b" style={{ borderColor: palette.outlineVariant }}>
         <div
-          className="grid grid-cols-4 p-1 gap-0.5"
+          className="grid grid-cols-5 p-1 gap-0.5"
           style={{ backgroundColor: palette.surfaceContainerHigh, borderRadius: shapes.full }}
         >
           {(
             [
               { key: "parts", label: "Parts", icon: "widgets" },
               { key: "screens", label: "Screens", icon: "smartphone" },
+              { key: "data", label: "Data", icon: "database" },
               { key: "tree", label: "AST Tree", icon: "account_tree" },
               { key: "tokens", label: "Tokens", icon: "data_object" },
             ] as const
@@ -476,6 +478,8 @@ export function LeftSidebar() {
           </div>
         </div>
       )}
+
+      {tab === "data" && <DataStateSidebar />}
 
       {tab === "tree" && activeScreen && (
         <div className="no-scrollbar flex-1 overflow-y-auto p-3 space-y-3">

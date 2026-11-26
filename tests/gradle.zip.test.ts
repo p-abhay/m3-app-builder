@@ -173,6 +173,6 @@ describe("Phase 7: ZIP Archiver & Android Studio Gradle Exporter", () => {
       fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { version: string };
     assert.equal(APP_VERSION, pkg.version);
-    assert.match(APP_VERSION, /^0\.2\./);
+    assert.match(APP_VERSION, /^0\.3\./);
   });
 });

@@ -23,6 +23,8 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
   const { palette, shapes } = useM3Theme();
   const project = useProjectStore((s) => s.project);
   const setPackageName = useProjectStore((s) => s.setPackageName);
+  const setPersistenceBackend = useProjectStore((s) => s.setPersistenceBackend);
+  const persistenceBackend = project.state?.persistenceBackend ?? "datastore";
 
   const [m3Expressive, setM3Expressive] = useState(false);
   const [minSdk, setMinSdk] = useState(26);
@@ -38,8 +40,9 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
         minSdk,
         targetSdk,
         compileSdk: Math.max(targetSdk, 35),
+        persistenceBackend,
       }),
-    [project, m3Expressive, minSdk, targetSdk],
+    [project, m3Expressive, minSdk, targetSdk, persistenceBackend],
   );
 
   useEffect(() => {
@@ -280,6 +283,30 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
                   API {v}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-1.5">
+            <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+              storage
+            </span>
+            <select
+              data-testid="gradle-storage-select"
+              aria-label="Persistence Storage Backend"
+              value={persistenceBackend}
+              onChange={(e) =>
+                setPersistenceBackend(e.target.value as "datastore" | "sharedPreferences")
+              }
+              className="px-2 py-1 text-xs border outline-none"
+              style={{
+                borderRadius: shapes.small,
+                backgroundColor: palette.surfaceContainerLowest,
+                borderColor: palette.outlineVariant,
+                color: palette.onSurface,
+              }}
+            >
+              <option value="datastore">DataStore</option>
+              <option value="sharedPreferences">SharedPrefs</option>
             </select>
           </label>
         </div>

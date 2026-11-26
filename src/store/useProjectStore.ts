@@ -10,15 +10,21 @@ import {
   setSlotNode as setSlotNodeOp,
   slugifyRoute,
   updateNodeAction as updateNodeActionOp,
+  updateNodeBindings as updateNodeBindingsOp,
   updateNodeProps as updateNodePropsOp,
   updateNodeStyle as updateNodeStyleOp,
 } from "../ast/operations.ts";
+import { createEmptyAppState } from "../ast/state.ts";
 import { STARTER_TEMPLATES } from "../ast/templates.ts";
 import type {
+  AppCollection,
   AppProject,
+  AppVariable,
   ComponentNode,
   ComponentStyle,
   NavDestination,
+  NodeBindings,
+  PersistenceBackend,
   ScreenNode,
   UserAction,
 } from "../ast/types.ts";
@@ -123,6 +129,14 @@ export interface ProjectStoreState {
   updateNodeProps: (nodeId: string, propsPatch: Record<string, unknown>) => void;
   updateNodeStyle: (nodeId: string, stylePatch: Partial<ComponentStyle>) => void;
   updateNodeAction: (nodeId: string, action: UserAction | undefined) => void;
+  updateNodeBindings: (nodeId: string, bindings: NodeBindings | undefined) => void;
+
+  // App state, collections & persistence
+  setPersistenceBackend: (backend: PersistenceBackend) => void;
+  upsertVariable: (variable: AppVariable) => void;
+  removeVariable: (key: string) => void;
+  upsertCollection: (collection: AppCollection) => void;
+  removeCollection: (key: string) => void;
 }
 
 const initialProject = loadInitialProject();
@@ -468,4 +482,63 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       ),
     );
   },
+
+  updateNodeBindings: (nodeId, bindings) => {
+    const { activeScreenId, commit } = get();
+    commit((proj) =>
+      updateActiveScreenInProject(proj, activeScreenId, (scr) =>
+        updateNodeBindingsOp(scr, nodeId, bindings),
+      ),
+    );
+  },
+
+  setPersistenceBackend: (persistenceBackend) =>
+    get().commit((proj) => {
+      const base = proj.state ?? createEmptyAppState();
+      return { ...proj, state: { ...base, persistenceBackend } };
+    }),
+
+  upsertVariable: (variable) =>
+    get().commit((proj) => {
+      const base = proj.state ?? createEmptyAppState();
+      const exists = base.variables.some((v) => v.key === variable.key);
+      const variables = exists
+        ? base.variables.map((v) => (v.key === variable.key ? variable : v))
+        : [...base.variables, variable];
+      return { ...proj, state: { ...base, variables } };
+    }),
+
+  removeVariable: (key) =>
+    get().commit((proj) => {
+      const base = proj.state ?? createEmptyAppState();
+      return {
+        ...proj,
+        state: {
+          ...base,
+          variables: base.variables.filter((v) => v.key !== key),
+        },
+      };
+    }),
+
+  upsertCollection: (collection) =>
+    get().commit((proj) => {
+      const base = proj.state ?? createEmptyAppState();
+      const exists = base.collections.some((c) => c.key === collection.key);
+      const collections = exists
+        ? base.collections.map((c) => (c.key === collection.key ? collection : c))
+        : [...base.collections, collection];
+      return { ...proj, state: { ...base, collections } };
+    }),
+
+  removeCollection: (key) =>
+    get().commit((proj) => {
+      const base = proj.state ?? createEmptyAppState();
+      return {
+        ...proj,
+        state: {
+          ...base,
+          collections: base.collections.filter((c) => c.key !== key),
+        },
+      };
+    }),
 }));

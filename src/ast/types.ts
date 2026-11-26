@@ -27,13 +27,18 @@ export type ComponentType =
   | "ListItem"
   // Progress & M3E feedback
   | "LoadingIndicator"
-  | "ProgressBar";
+  | "ProgressBar"
+  // State, Search & Lists (v0.3.0)
+  | "SearchBar"
+  | "SegmentedButton"
+  | "DataList";
 
 export const CONTAINER_TYPES: ReadonlySet<ComponentType> = new Set([
   "Column",
   "Row",
   "Box",
   "Card",
+  "DataList",
 ]);
 
 export type SpacingBox = {
@@ -55,13 +60,99 @@ export interface ComponentStyle {
 
 export type TransitionType = "slide" | "fade" | "expand" | "none";
 
+export type PersistenceBackend = "datastore" | "sharedPreferences";
+
+export interface AppVariable {
+  key: string;
+  label: string;
+  type: "string" | "boolean" | "number";
+  defaultValue: string | boolean | number;
+  persist: boolean;
+}
+
+export interface CollectionField {
+  key: string;
+  label: string;
+  type: "string" | "boolean" | "number";
+}
+
+export type CollectionRecord = Record<string, string | boolean | number> & { id?: string };
+
+export interface AppCollection {
+  key: string;
+  label: string;
+  itemLabel: string;
+  fields: CollectionField[];
+  initialItems: (CollectionRecord & { id: string })[];
+  persist: boolean;
+}
+
+export interface AppStateConfig {
+  persistenceBackend: PersistenceBackend;
+  variables: AppVariable[];
+  collections: AppCollection[];
+}
+
+export interface NodeBindings {
+  /** Two-way value binding to an `AppVariable` key (e.g. `searchQuery`, `draftTitle`). */
+  stateKey?: string;
+  /** Two-way field binding inside a `DataList` item template (e.g. `completed`). */
+  itemField?: string;
+}
+
+export interface SegmentedOption {
+  value: string;
+  label: string;
+  icon?: string;
+}
+
 export type UserAction =
   | { type: "none" }
   | { type: "navigate"; targetScreenId: string; transition: TransitionType }
   | { type: "navigateBack" }
   | { type: "openUrl"; url: string }
   | { type: "showSnackbar"; message: string }
-  | { type: "toggleState"; stateKey?: string };
+  | { type: "toggleState"; stateKey?: string }
+  | { type: "setState"; stateKey: string; value: string | boolean | number }
+  | {
+      type: "createItem";
+      collectionKey: string;
+      fieldFromState: Record<string, string>;
+      clearStateKeys?: string[];
+      navigateBackAfter?: boolean;
+      snackbarMessage?: string;
+    }
+  | {
+      type: "selectItem";
+      collectionKey: string;
+      targetStateKey: string;
+      populateState?: Record<string, string>;
+      targetScreenId?: string;
+      transition?: TransitionType;
+    }
+  | {
+      type: "updateItem";
+      collectionKey: string;
+      idStateKey?: string;
+      fieldFromState: Record<string, string>;
+      createIfMissing?: boolean;
+      clearStateKeys?: string[];
+      navigateBackAfter?: boolean;
+      snackbarMessage?: string;
+    }
+  | {
+      type: "toggleItemField";
+      collectionKey: string;
+      field: string;
+      idStateKey?: string;
+    }
+  | {
+      type: "deleteItem";
+      collectionKey: string;
+      idStateKey?: string;
+      navigateBackAfter?: boolean;
+      snackbarMessage?: string;
+    };
 
 export interface TopAppBarActionItem {
   id: string;
@@ -199,6 +290,29 @@ export interface NodePropsMap {
     value: number;
     wavy: boolean;
   };
+  SearchBar: {
+    placeholder: string;
+    value: string;
+    leadingIcon: string;
+    showClearButton: boolean;
+    trailingIcon?: string;
+    trailingAction?: UserAction;
+  };
+  SegmentedButton: {
+    options: SegmentedOption[];
+    selectedValue: string;
+  };
+  DataList: {
+    collectionKey: string;
+    searchStateKey?: string;
+    searchFields: string[];
+    filterField?: string;
+    filterStateKey?: string;
+    sortStateKey?: string;
+    gap: number;
+    emptyTitle: string;
+    emptySubtitle?: string;
+  };
 }
 
 export type ComponentNode = {
@@ -211,6 +325,7 @@ export type ComponentNode = {
     style: ComponentStyle;
     props: NodePropsMap[K];
     action?: UserAction;
+    bindings?: NodeBindings;
   };
 }[ComponentType];
 
@@ -254,4 +369,5 @@ export interface AppProject {
   bottomNav: SharedBottomNav;
   screens: ScreenNode[];
   initialScreenId: string;
+  state?: AppStateConfig;
 }

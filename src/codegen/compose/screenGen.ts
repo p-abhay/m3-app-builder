@@ -1,4 +1,4 @@
-import type { ComponentNode, NodeOfType, ScreenNode } from "../../ast/types.ts";
+import type { AppStateConfig, ComponentNode, NodeOfType, ScreenNode } from "../../ast/types.ts";
 import type { ComposeDiagnostic, GeneratedKotlinFile } from "./types.ts";
 import {
   actionStatements,
@@ -7,8 +7,11 @@ import {
   indentLines,
   kotlinFloat,
   kotlinString,
+  kotlinTemplateString,
   toCamelCase,
   toMaterialIconRef,
+  toPascalCase,
+  type ActionContextOptions,
   type ModifierOptions,
 } from "./utils.ts";
 
@@ -16,16 +19,22 @@ interface ScreenGenContext {
   screen: ScreenNode;
   routeMap: Map<string, string>;
   m3Expressive: boolean;
+  hasAppState: boolean;
+  appStateConfig?: AppStateConfig;
+  variableDefaults: Map<string, string | boolean | number>;
   stateDecls: string[];
   stateCounter: Record<string, number>;
   diagnostics: ComposeDiagnostic[];
   needsExperimentalLayout: boolean;
+  needsLazyList: boolean;
   reportedNestedScrollWarning: boolean;
 }
 
 interface ChildScope {
   parentKind: "column" | "row" | "flowRow" | "box";
   hasVerticalScrollAncestor: boolean;
+  inItemScope: boolean;
+  itemCollectionKey?: string;
   flowVerticalAlign?: "top" | "center" | "bottom";
 }
 
@@ -37,10 +46,40 @@ function childModOpts(scope: ChildScope, extraOpts: ModifierOptions = {}): Modif
   };
 }
 
+function actionOpts(ctx: ScreenGenContext, scope: ChildScope): ActionContextOptions {
+  return {
+    hasAppState: ctx.hasAppState,
+    inItemScope: scope.inItemScope,
+    variableDefaults: ctx.variableDefaults,
+  };
+}
+
 function nextStateVar(ctx: ScreenGenContext, base: string): string {
   const count = (ctx.stateCounter[base] ?? 0) + 1;
   ctx.stateCounter[base] = count;
   return count === 1 ? base : `${base}${count}`;
+}
+
+function resolveBoundState(
+  ctx: ScreenGenContext,
+  node: ComponentNode,
+  fallbackBase: string,
+  initialKotlinExpr: string,
+): { valueExpr: string; assignExpr: (rhs: string) => string } {
+  const sKey = node.bindings?.stateKey;
+  if (ctx.hasAppState && sKey && ctx.appStateConfig?.variables.some((v) => v.key === sKey)) {
+    const prop = `appState.${toCamelCase(sKey, "stateVar")}`;
+    return {
+      valueExpr: prop,
+      assignExpr: (rhs: string) => `${prop} = ${rhs}; appState.notifyChanged()`,
+    };
+  }
+  const localVar = nextStateVar(ctx, fallbackBase);
+  ctx.stateDecls.push(`var ${localVar} by remember { mutableStateOf(${initialKotlinExpr}) }`);
+  return {
+    valueExpr: localVar,
+    assignExpr: (rhs: string) => `${localVar} = ${rhs}`,
+  };
 }
 
 function recordBrokenNav(ctx: ScreenGenContext, nodeId: string, targetScreenId: string): void {
@@ -52,12 +91,19 @@ function recordBrokenNav(ctx: ScreenGenContext, nodeId: string, targetScreenId: 
   });
 }
 
-function emitActionLambda(ctx: ScreenGenContext, node: ComponentNode): string {
-  const stmts = actionStatements(node.action, ctx.routeMap, (target) =>
-    recordBrokenNav(ctx, node.id, target),
+function emitActionBody(ctx: ScreenGenContext, node: ComponentNode, scope: ChildScope): string {
+  const stmts = actionStatements(
+    node.action,
+    ctx.routeMap,
+    (target) => recordBrokenNav(ctx, node.id, target),
+    actionOpts(ctx, scope),
   );
-  if (stmts.length === 0) return "{}";
-  return `{ ${stmts.join("; ")} }`;
+  return stmts.join("; ");
+}
+
+function emitActionLambda(ctx: ScreenGenContext, node: ComponentNode, scope: ChildScope): string {
+  const body = emitActionBody(ctx, node, scope);
+  return body ? `{ ${body} }` : "{}";
 }
 
 function emitContainerChildren(
@@ -109,7 +155,11 @@ function boxAlignExpr(align: NodeOfType<"Box">["props"]["contentAlignment"]): st
   return table[align] ?? "Alignment.TopStart";
 }
 
-function emitTopAppBar(ctx: ScreenGenContext, node: NodeOfType<"TopAppBar">): string[] {
+function emitTopAppBar(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"TopAppBar">,
+  scope: ChildScope,
+): string[] {
   const fnMap: Record<NodeOfType<"TopAppBar">["props"]["variant"], string> = {
     small: "TopAppBar",
     centerAligned: "CenterAlignedTopAppBar",
@@ -117,28 +167,35 @@ function emitTopAppBar(ctx: ScreenGenContext, node: NodeOfType<"TopAppBar">): st
     large: "LargeTopAppBar",
   };
   const fn = fnMap[node.props.variant];
+  const titleExpr = kotlinTemplateString(node.props.title, ctx.hasAppState, scope.inItemScope);
+  const subExpr = node.props.subtitle
+    ? kotlinTemplateString(node.props.subtitle, ctx.hasAppState, scope.inItemScope)
+    : null;
+
   const lines: string[] = [
     `${fn}(`,
     "    title = {",
-    ...(node.props.subtitle
+    ...(subExpr
       ? [
           "        Column {",
-          `            Text(${kotlinString(node.props.title)}, style = MaterialTheme.typography.titleLarge)`,
-          `            Text(${kotlinString(node.props.subtitle)}, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)`,
+          `            Text(${titleExpr}, style = MaterialTheme.typography.titleLarge)`,
+          `            Text(${subExpr}, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)`,
           "        }",
         ]
-      : [`        Text(${kotlinString(node.props.title)})`]),
+      : [`        Text(${titleExpr})`]),
     "    },",
   ];
 
   if (node.props.navigationIcon) {
-    const navStmts = actionStatements(node.props.navigationAction, ctx.routeMap, (t) =>
-      recordBrokenNav(ctx, node.id, t),
+    const navStmts = actionStatements(
+      node.props.navigationAction,
+      ctx.routeMap,
+      (t) => recordBrokenNav(ctx, node.id, t),
+      actionOpts(ctx, scope),
     );
-    const navBody = navStmts.length ? navStmts.join("; ") : "";
     lines.push(
       "    navigationIcon = {",
-      `        IconButton(onClick = { ${navBody} }) {`,
+      `        IconButton(onClick = { ${navStmts.join("; ")} }) {`,
       `            Icon(${toMaterialIconRef(node.props.navigationIcon)}, contentDescription = "Navigation")`,
       "        }",
       "    },",
@@ -148,8 +205,11 @@ function emitTopAppBar(ctx: ScreenGenContext, node: NodeOfType<"TopAppBar">): st
   if (node.props.actions.length > 0) {
     lines.push("    actions = {");
     for (const act of node.props.actions) {
-      const actStmts = actionStatements(act.action, ctx.routeMap, (t) =>
-        recordBrokenNav(ctx, node.id, t),
+      const actStmts = actionStatements(
+        act.action,
+        ctx.routeMap,
+        (t) => recordBrokenNav(ctx, node.id, t),
+        actionOpts(ctx, scope),
       );
       lines.push(
         `        IconButton(onClick = { ${actStmts.join("; ")} }) {`,
@@ -164,8 +224,12 @@ function emitTopAppBar(ctx: ScreenGenContext, node: NodeOfType<"TopAppBar">): st
   return lines;
 }
 
-function emitFab(ctx: ScreenGenContext, node: NodeOfType<"FloatingActionButton">): string[] {
-  const onClick = emitActionLambda(ctx, node);
+function emitFab(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"FloatingActionButton">,
+  scope: ChildScope,
+): string[] {
+  const onClick = emitActionLambda(ctx, node, scope);
   const colorArg = `containerColor = ${colorTokenExpr(node.props.colorRole)}`;
   const iconCall = `Icon(${toMaterialIconRef(node.props.icon)}, contentDescription = ${kotlinString(node.props.label || "Action")})`;
 
@@ -175,7 +239,7 @@ function emitFab(ctx: ScreenGenContext, node: NodeOfType<"FloatingActionButton">
       `    onClick = ${onClick},`,
       `    ${colorArg},`,
       `    icon = { ${iconCall} },`,
-      `    text = { Text(${kotlinString(node.props.label || "Action")}) },`,
+      `    text = { Text(${kotlinTemplateString(node.props.label || "Action", ctx.hasAppState, scope.inItemScope)}) },`,
       ")",
     ];
   }
@@ -208,7 +272,7 @@ function emitButton(
   const fn = fnMap[node.props.variant];
   return [
     `${fn}(`,
-    `    onClick = ${emitActionLambda(ctx, node)},`,
+    `    onClick = ${emitActionLambda(ctx, node, scope)},`,
     `    modifier = ${mod},`,
     `    enabled = ${node.props.enabled ? "true" : "false"},`,
     ") {",
@@ -218,7 +282,107 @@ function emitButton(
           "    Spacer(Modifier.width(8.dp))",
         ]
       : []),
-    `    Text(${kotlinString(node.props.label)})`,
+    `    Text(${kotlinTemplateString(node.props.label, ctx.hasAppState, scope.inItemScope)})`,
+    "}",
+  ];
+}
+
+function emitSearchBar(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"SearchBar">,
+  scope: ChildScope,
+): string[] {
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
+  const { valueExpr, assignExpr } = resolveBoundState(
+    ctx,
+    node,
+    toCamelCase("searchQuery"),
+    kotlinString(node.props.value),
+  );
+
+  const trailingStmts = node.props.trailingAction
+    ? actionStatements(
+        node.props.trailingAction,
+        ctx.routeMap,
+        (t) => recordBrokenNav(ctx, node.id, t),
+        actionOpts(ctx, scope),
+      )
+    : [];
+
+  const hasTrailing = node.props.showClearButton || Boolean(node.props.trailingIcon);
+  const lines = [
+    "OutlinedTextField(",
+    `    value = ${valueExpr},`,
+    `    onValueChange = { ${assignExpr("it")} },`,
+    `    modifier = ${mod},`,
+    `    placeholder = { Text(${kotlinString(node.props.placeholder)}) },`,
+    "    singleLine = true,",
+    "    shape = CircleShape,",
+    `    leadingIcon = { Icon(${toMaterialIconRef(node.props.leadingIcon)}, contentDescription = "Search") },`,
+  ];
+
+  if (hasTrailing) {
+    lines.push("    trailingIcon = {");
+    lines.push('        Row(verticalAlignment = Alignment.CenterVertically) {');
+    if (node.props.showClearButton) {
+      lines.push(
+        `            if (${valueExpr}.isNotEmpty()) {`,
+        `                IconButton(onClick = { ${assignExpr('""')} }) {`,
+        '                    Icon(Icons.Rounded.Close, contentDescription = "Clear")',
+        "                }",
+        "            }",
+      );
+    }
+    if (node.props.trailingIcon) {
+      lines.push(
+        `            IconButton(onClick = { ${trailingStmts.join("; ")} }) {`,
+        `                Icon(${toMaterialIconRef(node.props.trailingIcon)}, contentDescription = "Action")`,
+        "            }",
+      );
+    }
+    lines.push("        }");
+    lines.push("    },");
+  }
+
+  lines.push(")");
+  return lines;
+}
+
+function emitSegmentedButton(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"SegmentedButton">,
+  scope: ChildScope,
+): string[] {
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
+  const options = node.props.options.length
+    ? node.props.options
+    : [{ value: "all", label: "All" }];
+  const { valueExpr, assignExpr } = resolveBoundState(
+    ctx,
+    node,
+    toCamelCase(node.name || "segment"),
+    kotlinString(node.props.selectedValue || options[0].value),
+  );
+  const actionExtra = emitActionBody(ctx, node, scope);
+  const count = options.length;
+
+  return [
+    `SingleChoiceSegmentedButtonRow(modifier = ${mod}) {`,
+    ...options.flatMap((opt, idx) => {
+      const valLit = kotlinString(opt.value);
+      const onClickBody = actionExtra ? `${assignExpr(valLit)}; ${actionExtra}` : assignExpr(valLit);
+      return [
+        "    SegmentedButton(",
+        `        shape = SegmentedButtonDefaults.itemShape(index = ${idx}, count = ${count}),`,
+        `        onClick = { ${onClickBody} },`,
+        `        selected = ${valueExpr} == ${valLit},`,
+        ...(opt.icon
+          ? [`        icon = { Icon(${toMaterialIconRef(opt.icon)}, contentDescription = null) },`]
+          : []),
+        `        label = { Text(${kotlinString(opt.label)}) },`,
+        "    )",
+      ];
+    }),
     "}",
   ];
 }
@@ -241,10 +405,8 @@ function emitInputControl(
       if (node.props.toggleable) {
         const varName = nextStateVar(ctx, toCamelCase(node.name || "iconSelected"));
         ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(false) }`);
-        const extra = actionStatements(node.action, ctx.routeMap, (t) =>
-          recordBrokenNav(ctx, node.id, t),
-        );
-        const toggleStmt = `${varName} = !${varName}${extra.length ? `; ${extra.join("; ")}` : ""}`;
+        const extra = emitActionBody(ctx, node, scope);
+        const toggleStmt = `${varName} = !${varName}${extra ? `; ${extra}` : ""}`;
         const activeIcon = toMaterialIconRef(node.props.selectedIcon || node.props.icon);
         const idleIcon = toMaterialIconRef(node.props.icon);
         return [
@@ -254,19 +416,23 @@ function emitInputControl(
         ];
       }
       return [
-        `${fnMap[node.props.variant]}(onClick = ${emitActionLambda(ctx, node)}, modifier = ${mod}) {`,
+        `${fnMap[node.props.variant]}(onClick = ${emitActionLambda(ctx, node, scope)}, modifier = ${mod}) {`,
         `    Icon(${toMaterialIconRef(node.props.icon)}, contentDescription = null)`,
         "}",
       ];
     }
     case "TextField": {
-      const varName = nextStateVar(ctx, toCamelCase(node.props.label || "fieldText"));
-      ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(${kotlinString(node.props.value)}) }`);
+      const { valueExpr, assignExpr } = resolveBoundState(
+        ctx,
+        node,
+        toCamelCase(node.props.label || "fieldText"),
+        kotlinString(node.props.value),
+      );
       const fn = node.props.variant === "outlined" ? "OutlinedTextField" : "TextField";
       const lines = [
         `${fn}(`,
-        `    value = ${varName},`,
-        `    onValueChange = { ${varName} = it },`,
+        `    value = ${valueExpr},`,
+        `    onValueChange = { ${assignExpr("it")} },`,
         `    modifier = ${mod},`,
         `    label = { Text(${kotlinString(node.props.label)}) },`,
         `    placeholder = { Text(${kotlinString(node.props.placeholder)}) },`,
@@ -284,9 +450,21 @@ function emitInputControl(
       return lines;
     }
     case "Switch": {
-      const varName = nextStateVar(ctx, toCamelCase(node.props.label || "switchChecked"));
-      ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(${node.props.checked ? "true" : "false"}) }`);
-      // Switch rows fill available width on the canvas (w-full + justify-between)
+      const { valueExpr, assignExpr } = resolveBoundState(
+        ctx,
+        node,
+        toCamelCase(node.props.label || "switchChecked"),
+        node.props.checked ? "true" : "false",
+      );
+      const itemField = node.bindings?.itemField;
+      const checkedExpr =
+        scope.inItemScope && itemField ? `item.${toCamelCase(itemField)}` : valueExpr;
+      const extraBody = emitActionBody(ctx, node, scope);
+      const onChangeBody =
+        scope.inItemScope && itemField && extraBody
+          ? extraBody
+          : `${assignExpr("it")}${extraBody ? `; ${extraBody}` : ""}`;
+
       const switchStyle =
         scope.parentKind !== "flowRow" && (!node.style.width || node.style.width === "wrap")
           ? { ...node.style, width: "fill" as const }
@@ -295,43 +473,74 @@ function emitInputControl(
       const textMod = scope.parentKind !== "flowRow" ? ", modifier = Modifier.weight(1f)" : "";
       return [
         `Row(modifier = ${switchMod}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {`,
-        `    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.bodyLarge${textMod})`,
+        `    Text(${kotlinTemplateString(node.props.label, ctx.hasAppState, scope.inItemScope)}, style = MaterialTheme.typography.bodyLarge${textMod})`,
         "    Spacer(Modifier.width(12.dp))",
-        `    Switch(checked = ${varName}, onCheckedChange = { ${varName} = it })`,
+        `    Switch(checked = ${checkedExpr}, onCheckedChange = { ${onChangeBody} })`,
         "}",
       ];
     }
     case "Checkbox": {
-      const varName = nextStateVar(ctx, toCamelCase(node.props.label || "checkboxChecked"));
-      ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(${node.props.checked ? "true" : "false"}) }`);
+      const itemField = node.bindings?.itemField;
+      const { valueExpr, assignExpr } =
+        scope.inItemScope && itemField
+          ? { valueExpr: `item.${toCamelCase(itemField)}`, assignExpr: () => "" }
+          : resolveBoundState(
+              ctx,
+              node,
+              toCamelCase(node.props.label || "checkboxChecked"),
+              node.props.checked ? "true" : "false",
+            );
+      const extraBody = emitActionBody(ctx, node, scope);
+      const onChangeBody =
+        scope.inItemScope && itemField
+          ? extraBody ||
+            (ctx.hasAppState && scope.itemCollectionKey
+              ? `appState.toggle${toPascalCase(scope.itemCollectionKey, "Items")}Field(id = item.id, field = ${kotlinString(itemField)})`
+              : "")
+          : `${assignExpr("it")}${extraBody ? `; ${extraBody}` : ""}`;
+
       return [
         `Row(modifier = ${mod}, verticalAlignment = Alignment.CenterVertically) {`,
-        `    Checkbox(checked = ${varName}, onCheckedChange = { ${varName} = it })`,
-        "    Spacer(Modifier.width(8.dp))",
-        `    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.bodyMedium)`,
+        `    Checkbox(checked = ${valueExpr}, onCheckedChange = { ${onChangeBody} })`,
+        ...(node.props.label
+          ? [
+              "    Spacer(Modifier.width(8.dp))",
+              `    Text(${kotlinTemplateString(node.props.label, ctx.hasAppState, scope.inItemScope)}, style = MaterialTheme.typography.bodyMedium)`,
+            ]
+          : []),
         "}",
       ];
     }
     case "Slider": {
-      const varName = nextStateVar(ctx, toCamelCase(node.props.label || "sliderValue"));
-      ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(${kotlinFloat(node.props.value)}) }`);
+      const { valueExpr, assignExpr } = resolveBoundState(
+        ctx,
+        node,
+        toCamelCase(node.props.label || "sliderValue"),
+        kotlinFloat(node.props.value),
+      );
       return [
         `Column(modifier = ${mod}) {`,
         `    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.labelLarge)`,
-        `    Slider(value = ${varName}, onValueChange = { ${varName} = it }, valueRange = ${kotlinFloat(node.props.min)}..${kotlinFloat(node.props.max)})`,
+        `    Slider(value = ${valueExpr}, onValueChange = { ${assignExpr("it")} }, valueRange = ${kotlinFloat(node.props.min)}..${kotlinFloat(node.props.max)})`,
         "}",
       ];
     }
     case "Chip": {
-      const varName = nextStateVar(ctx, toCamelCase(node.props.label || "chipSelected"));
+      const { valueExpr, assignExpr } = resolveBoundState(
+        ctx,
+        node,
+        toCamelCase(node.props.label || "chipSelected"),
+        node.props.selected ? "true" : "false",
+      );
       if (node.props.variant === "filter") {
-        ctx.stateDecls.push(`var ${varName} by remember { mutableStateOf(${node.props.selected ? "true" : "false"}) }`);
+        const extraBody = emitActionBody(ctx, node, scope);
+        const onClickBody = `${assignExpr(`!${valueExpr}`)}${extraBody ? `; ${extraBody}` : ""}`;
         return [
           "FilterChip(",
-          `    selected = ${varName},`,
-          `    onClick = { ${varName} = !${varName} },`,
+          `    selected = ${valueExpr},`,
+          `    onClick = { ${onClickBody} },`,
           `    modifier = ${mod},`,
-          `    label = { Text(${kotlinString(node.props.label)}) },`,
+          `    label = { Text(${kotlinTemplateString(node.props.label, ctx.hasAppState, scope.inItemScope)}) },`,
           ...(node.props.icon
             ? [`    leadingIcon = { Icon(${toMaterialIconRef(node.props.icon)}, contentDescription = null) },`]
             : []),
@@ -346,11 +555,11 @@ function emitInputControl(
             : "AssistChip";
       if (chipFn === "InputChip") {
         return [
-          `InputChip(selected = ${node.props.selected ? "true" : "false"}, onClick = ${emitActionLambda(ctx, node)}, modifier = ${mod}, label = { Text(${kotlinString(node.props.label)}) })`,
+          `InputChip(selected = ${node.props.selected ? "true" : "false"}, onClick = ${emitActionLambda(ctx, node, scope)}, modifier = ${mod}, label = { Text(${kotlinString(node.props.label)}) })`,
         ];
       }
       return [
-        `${chipFn}(onClick = ${emitActionLambda(ctx, node)}, modifier = ${mod}, label = { Text(${kotlinString(node.props.label)}) })`,
+        `${chipFn}(onClick = ${emitActionLambda(ctx, node, scope)}, modifier = ${mod}, label = { Text(${kotlinString(node.props.label)}) })`,
       ];
     }
     default:
@@ -368,20 +577,24 @@ function emitListItem(
     childModOpts(scope, {
       extra:
         node.action && node.action.type !== "none"
-          ? [`.clickable ${emitActionLambda(ctx, node)}`]
+          ? [`.clickable ${emitActionLambda(ctx, node, scope)}`]
           : undefined,
     }),
   );
   const lines = [
     "ListItem(",
     `    modifier = ${mod},`,
-    `    headlineContent = { Text(${kotlinString(node.props.headline)}) },`,
+    `    headlineContent = { Text(${kotlinTemplateString(node.props.headline, ctx.hasAppState, scope.inItemScope)}) },`,
   ];
   if (node.props.supportingText) {
-    lines.push(`    supportingContent = { Text(${kotlinString(node.props.supportingText)}) },`);
+    lines.push(
+      `    supportingContent = { Text(${kotlinTemplateString(node.props.supportingText, ctx.hasAppState, scope.inItemScope)}) },`,
+    );
   }
   if (node.props.overlineText) {
-    lines.push(`    overlineContent = { Text(${kotlinString(node.props.overlineText)}) },`);
+    lines.push(
+      `    overlineContent = { Text(${kotlinTemplateString(node.props.overlineText, ctx.hasAppState, scope.inItemScope)}) },`,
+    );
   }
   if (node.props.leadingStyle !== "none" && node.props.leadingIcon) {
     const iconExpr = `Icon(${toMaterialIconRef(node.props.leadingIcon)}, contentDescription = null)`;
@@ -451,6 +664,91 @@ function emitProgressOrLoader(
   return [];
 }
 
+function emitDataList(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"DataList">,
+  scope: ChildScope,
+): string[] {
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
+  if (!ctx.hasAppState || !node.props.collectionKey) {
+    return [
+      `OutlinedCard(modifier = ${mod}) {`,
+      '    Column(modifier = Modifier.padding(16.dp)) {',
+      `        Text(${kotlinString(node.props.emptyTitle)}, style = MaterialTheme.typography.titleMedium)`,
+      ...(node.props.emptySubtitle
+        ? [`        Text(${kotlinString(node.props.emptySubtitle)}, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)`]
+        : []),
+      "    }",
+      "}",
+    ];
+  }
+
+  const colKey = node.props.collectionKey;
+  const colPascal = toPascalCase(colKey, "Items");
+  const listVar = `items_${toCamelCase(node.id, "list")}`;
+
+  const qArg =
+    node.props.searchStateKey && ctx.appStateConfig?.variables.some((v) => v.key === node.props.searchStateKey)
+      ? `appState.${toCamelCase(node.props.searchStateKey)}`
+      : '""';
+  const fArg =
+    node.props.filterStateKey && ctx.appStateConfig?.variables.some((v) => v.key === node.props.filterStateKey)
+      ? `appState.${toCamelCase(node.props.filterStateKey)}`
+      : '"all"';
+  const sArg =
+    node.props.sortStateKey && ctx.appStateConfig?.variables.some((v) => v.key === node.props.sortStateKey)
+      ? `appState.${toCamelCase(node.props.sortStateKey)}`
+      : '"newest"';
+
+  const itemChildren = emitContainerChildren(ctx, node, {
+    parentKind: "column",
+    hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+    inItemScope: true,
+    itemCollectionKey: colKey,
+  });
+
+  const useLazyColumn = !scope.hasVerticalScrollAncestor || typeof node.style.height === "number";
+  if (useLazyColumn) ctx.needsLazyList = true;
+
+  const emptyBlock = [
+    `    OutlinedCard(modifier = ${mod}) {`,
+    "        Column(modifier = Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {",
+    `            Text(${kotlinString(node.props.emptyTitle)}, style = MaterialTheme.typography.titleMedium)`,
+    ...(node.props.emptySubtitle
+      ? [`            Text(${kotlinString(node.props.emptySubtitle)}, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)`]
+      : []),
+    "        }",
+    "    }",
+  ];
+
+  const loopBlock = useLazyColumn
+    ? [
+        `    LazyColumn(modifier = ${mod}, verticalArrangement = Arrangement.spacedBy(${node.props.gap}.dp)) {`,
+        `        items(${listVar}, key = { it.id }) { item ->`,
+        ...indentLines(itemChildren, 12),
+        "        }",
+        "    }",
+      ]
+    : [
+        `    Column(modifier = ${mod}, verticalArrangement = Arrangement.spacedBy(${node.props.gap}.dp)) {`,
+        `        for (item in ${listVar}) {`,
+        "            key(item.id) {",
+        ...indentLines(itemChildren, 16),
+        "            }",
+        "        }",
+        "    }",
+      ];
+
+  return [
+    `val ${listVar} = appState.query${colPascal}(searchQuery = ${qArg}, filterValue = ${fArg}, sortBy = ${sArg})`,
+    `if (${listVar}.isEmpty()) {`,
+    ...emptyBlock,
+    "} else {",
+    ...loopBlock,
+    "}",
+  ];
+}
+
 function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): string[] {
   const node = ctx.screen.nodes[nodeId];
   if (!node) return [];
@@ -458,9 +756,15 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
 
   switch (node.type) {
     case "TopAppBar":
-      return emitTopAppBar(ctx, node);
+      return emitTopAppBar(ctx, node, scope);
     case "FloatingActionButton":
-      return emitFab(ctx, node);
+      return emitFab(ctx, node, scope);
+    case "SearchBar":
+      return emitSearchBar(ctx, node, scope);
+    case "SegmentedButton":
+      return emitSegmentedButton(ctx, node, scope);
+    case "DataList":
+      return emitDataList(ctx, node, scope);
     case "Column": {
       const gap = node.props.connected ? Math.min(node.props.gap, 3) : node.props.gap;
       const hasFiniteHeight = typeof node.style.height === "number";
@@ -479,10 +783,15 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
       }
       const extra: string[] = [];
       if (shouldScroll) extra.push(".verticalScroll(rememberScrollState())");
+      if (node.action && node.action.type !== "none") {
+        extra.push(`.clickable ${emitActionLambda(ctx, node, scope)}`);
+      }
       const mod = buildModifierExpr(node.style, childModOpts(scope, { extra }));
       const children = emitContainerChildren(ctx, node, {
         parentKind: "column",
         hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor || shouldScroll,
+        inItemScope: scope.inItemScope,
+        itemCollectionKey: scope.itemCollectionKey,
       });
       return [
         ...(node.props.connected ? ["// Connected M3 group container"] : []),
@@ -505,6 +814,8 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
         const children = emitContainerChildren(ctx, node, {
           parentKind: "flowRow",
           hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+          inItemScope: scope.inItemScope,
+          itemCollectionKey: scope.itemCollectionKey,
           flowVerticalAlign: node.props.verticalAlignment,
         });
         return [
@@ -517,6 +828,8 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
       const children = emitContainerChildren(ctx, node, {
         parentKind: "row",
         hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+        inItemScope: scope.inItemScope,
+        itemCollectionKey: scope.itemCollectionKey,
       });
       return [
         ...(node.props.connected ? ["// Connected M3 action group"] : []),
@@ -530,6 +843,8 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
       const children = emitContainerChildren(ctx, node, {
         parentKind: "box",
         hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+        inItemScope: scope.inItemScope,
+        itemCollectionKey: scope.itemCollectionKey,
       });
       return [
         `Box(modifier = ${mod}, contentAlignment = ${boxAlignExpr(node.props.contentAlignment)}) {`,
@@ -557,11 +872,13 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
         args.push(`colors = CardDefaults.cardColors(containerColor = ${colorTokenExpr(node.style.backgroundToken)})`);
       }
       if (node.action && node.action.type !== "none") {
-        args.push(`onClick = ${emitActionLambda(ctx, node)}`);
+        args.push(`onClick = ${emitActionLambda(ctx, node, scope)}`);
       }
       const children = emitContainerChildren(ctx, node, {
         parentKind: "column",
         hasVerticalScrollAncestor: scope.hasVerticalScrollAncestor,
+        inItemScope: scope.inItemScope,
+        itemCollectionKey: scope.itemCollectionKey,
       });
       return [
         `${cardFn}(${args.join(", ")}) {`,
@@ -575,8 +892,9 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
       const alignMap = { left: "TextAlign.Start", center: "TextAlign.Center", right: "TextAlign.End" };
       const maxLinesArg = node.props.maxLines ? `, maxLines = ${node.props.maxLines}` : "";
       const mod = buildModifierExpr(node.style, modOpts);
+      const txtExpr = kotlinTemplateString(node.props.text, ctx.hasAppState, scope.inItemScope);
       return [
-        `Text(text = ${kotlinString(node.props.text)}, modifier = ${mod}, style = MaterialTheme.typography.${node.props.role}, color = ${colorTokenExpr(node.props.colorToken)}, textAlign = ${alignMap[node.props.align]}${maxLinesArg})`,
+        `Text(text = ${txtExpr}, modifier = ${mod}, style = MaterialTheme.typography.${node.props.role}, color = ${colorTokenExpr(node.props.colorToken)}, textAlign = ${alignMap[node.props.align]}${maxLinesArg})`,
       ];
     }
     case "Icon": {
@@ -632,7 +950,8 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
       const bg = colorTokenExpr(node.props.colorRole);
       const badgeMod = buildModifierExpr(node.style, modOpts);
       const modArg = badgeMod === "Modifier" ? "" : `modifier = ${badgeMod}, `;
-      return [`Badge(${modArg}containerColor = ${bg}) { Text(${kotlinString(node.props.label)}) }`];
+      const lblExpr = kotlinTemplateString(node.props.label, ctx.hasAppState, scope.inItemScope);
+      return [`Badge(${modArg}containerColor = ${bg}) { Text(${lblExpr}) }`];
     }
     case "Button":
       return emitButton(ctx, node, scope);
@@ -659,26 +978,51 @@ export function generateScreenFile(
   routeMap: Map<string, string>,
   m3Expressive: boolean,
   diagnostics: ComposeDiagnostic[],
+  appStateConfig?: AppStateConfig,
 ): GeneratedKotlinFile {
+  const hasAppState = Boolean(
+    appStateConfig && (appStateConfig.variables.length > 0 || appStateConfig.collections.length > 0),
+  );
+  const variableDefaults = new Map<string, string | boolean | number>();
+  for (const v of appStateConfig?.variables ?? []) {
+    variableDefaults.set(v.key, v.defaultValue);
+  }
+
   const ctx: ScreenGenContext = {
     screen,
     routeMap,
     m3Expressive,
+    hasAppState,
+    appStateConfig,
+    variableDefaults,
     stateDecls: [],
     stateCounter: {},
     diagnostics,
     needsExperimentalLayout: false,
+    needsLazyList: false,
     reportedNestedScrollWarning: false,
   };
 
   const bodyNode = screen.nodes[screen.slots.bodyId];
-  const rootScope: ChildScope = { parentKind: "column", hasVerticalScrollAncestor: true };
+  const rootScope: ChildScope = {
+    parentKind: "column",
+    hasVerticalScrollAncestor: true,
+    inItemScope: false,
+  };
   const bodyChildren = bodyNode ? emitContainerChildren(ctx, bodyNode, rootScope) : [];
   const topBarLines = screen.slots.topBarId
-    ? emitNode(ctx, screen.slots.topBarId, { parentKind: "box", hasVerticalScrollAncestor: false })
+    ? emitNode(ctx, screen.slots.topBarId, {
+        parentKind: "box",
+        hasVerticalScrollAncestor: false,
+        inItemScope: false,
+      })
     : [];
   const fabLines = screen.slots.fabId
-    ? emitNode(ctx, screen.slots.fabId, { parentKind: "box", hasVerticalScrollAncestor: false })
+    ? emitNode(ctx, screen.slots.fabId, {
+        parentKind: "box",
+        hasVerticalScrollAncestor: false,
+        inItemScope: false,
+      })
     : [];
 
   const bodyGap = bodyNode?.type === "Column" ? bodyNode.props.gap : 12;
@@ -698,6 +1042,12 @@ export function generateScreenFile(
     "import androidx.compose.foundation.background",
     "import androidx.compose.foundation.clickable",
     "import androidx.compose.foundation.layout.*",
+    ...(ctx.needsLazyList
+      ? [
+          "import androidx.compose.foundation.lazy.LazyColumn",
+          "import androidx.compose.foundation.lazy.items",
+        ]
+      : []),
     "import androidx.compose.foundation.rememberScrollState",
     "import androidx.compose.foundation.shape.CircleShape",
     "import androidx.compose.foundation.shape.RoundedCornerShape",
@@ -714,10 +1064,12 @@ export function generateScreenFile(
     "import androidx.compose.ui.platform.LocalUriHandler",
     "import androidx.compose.ui.text.style.TextAlign",
     "import androidx.compose.ui.unit.dp",
+    ...(hasAppState ? [`import ${pkg}.ui.state.AppStateStore`] : []),
     "",
     `@OptIn(${optIns.join(", ")})`,
     "@Composable",
     `fun ${composableName}(`,
+    ...(hasAppState ? ["    appState: AppStateStore,"] : []),
     "    onNavigate: (String) -> Unit = {},",
     "    onNavigateBack: () -> Unit = {},",
     "    onShowSnackbar: (String) -> Unit = {},",

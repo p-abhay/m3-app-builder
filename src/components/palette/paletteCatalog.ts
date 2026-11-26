@@ -69,6 +69,14 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
     targetSlot: "body",
   },
   {
+    type: "DataList",
+    label: "Data List",
+    description: "Collection repeater with search & sort",
+    icon: "view_list",
+    category: "layout",
+    targetSlot: "body",
+  },
+  {
     type: "Spacer",
     label: "Spacer",
     description: "Vertical spacing dp gap",
@@ -110,6 +118,14 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
     category: "actions",
     targetSlot: "body",
   },
+  {
+    type: "SegmentedButton",
+    label: "Segmented",
+    description: "Single-choice filter & sort pills",
+    icon: "view_week",
+    category: "actions",
+    targetSlot: "body",
+  },
 
   // Scaffold Chrome
   {
@@ -130,6 +146,14 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
   },
 
   // Inputs
+  {
+    type: "SearchBar",
+    label: "Search Bar",
+    description: "M3 pill search with clear button",
+    icon: "search",
+    category: "inputs",
+    targetSlot: "body",
+  },
   {
     type: "TextField",
     label: "Text Field",

@@ -511,6 +511,394 @@ function buildBlankApp(): AppProject {
   };
 }
 
+function buildTodoApp(): AppProject {
+  const tasksId = "scr_tasks";
+  const editId = "scr_task_edit";
+
+  const tasksScreen = createBlankScreen("Tasks", "tasks", {
+    id: tasksId,
+    showBottomNav: false,
+    topBarProps: {
+      variant: "small",
+      title: "My Tasks",
+      subtitle: "{{count.todos}} total tasks",
+      actions: [],
+    },
+    fab: {
+      type: "FloatingActionButton",
+      name: "New Task FAB",
+      props: {
+        variant: "extended",
+        icon: "add",
+        label: "New Task",
+        colorRole: "primaryContainer",
+      },
+      action: {
+        type: "selectItem",
+        collectionKey: "todos",
+        targetStateKey: "editingId",
+        populateState: {
+          draftTitle: "title",
+          draftNotes: "notes",
+          draftPriority: "priority",
+        },
+        targetScreenId: editId,
+        transition: "slide",
+      },
+    },
+    bodyChildren: [
+      {
+        type: "SearchBar",
+        name: "Search Tasks",
+        style: { width: "fill" },
+        props: {
+          placeholder: "Search tasks...",
+          value: "",
+          leadingIcon: "search",
+          showClearButton: true,
+        },
+        bindings: { stateKey: "searchQuery" },
+      },
+      {
+        type: "SegmentedButton",
+        name: "Status Filter",
+        style: { width: "fill" },
+        props: {
+          options: [
+            { value: "all", label: "All" },
+            { value: "active", label: "Active" },
+            { value: "done", label: "Done" },
+          ],
+          selectedValue: "all",
+        },
+        bindings: { stateKey: "filterStatus" },
+      },
+      {
+        type: "SegmentedButton",
+        name: "Sort Order",
+        style: { width: "fill" },
+        props: {
+          options: [
+            { value: "newest", label: "Newest" },
+            { value: "az", label: "A–Z" },
+            { value: "priority", label: "Priority" },
+          ],
+          selectedValue: "newest",
+        },
+        bindings: { stateKey: "sortOrder" },
+      },
+      {
+        type: "Row",
+        name: "Quick Add Row",
+        style: { width: "fill" },
+        props: {
+          gap: 8,
+          verticalAlignment: "center",
+          horizontalArrangement: "start",
+          wrap: false,
+          connected: false,
+        },
+        children: [
+          {
+            type: "TextField",
+            style: { width: "fill" },
+            props: {
+              label: "Quick Task",
+              placeholder: "Add a new task...",
+              value: "",
+              variant: "outlined",
+            },
+            bindings: { stateKey: "quickTitle" },
+          },
+          {
+            type: "Button",
+            props: { label: "Add", variant: "filled", enabled: true },
+            action: {
+              type: "createItem",
+              collectionKey: "todos",
+              fieldFromState: { title: "quickTitle" },
+              clearStateKeys: ["quickTitle"],
+              snackbarMessage: "Task added",
+            },
+          },
+        ],
+      },
+      {
+        type: "DataList",
+        name: "Todo List",
+        style: { width: "fill" },
+        props: {
+          collectionKey: "todos",
+          searchStateKey: "searchQuery",
+          searchFields: ["title", "notes"],
+          filterField: "completed",
+          filterStateKey: "filterStatus",
+          sortStateKey: "sortOrder",
+          gap: 8,
+          emptyTitle: "No tasks match your filter",
+          emptySubtitle: "Try clearing search or adding a new task.",
+        },
+        children: [
+          {
+            type: "Card",
+            name: "Todo Card",
+            style: { width: "fill", padding: uniformSpacing(12) },
+            props: { variant: "outlined", gap: 6 },
+            children: [
+              {
+                type: "Row",
+                style: { width: "fill" },
+                props: {
+                  gap: 10,
+                  verticalAlignment: "center",
+                  horizontalArrangement: "start",
+                  wrap: false,
+                  connected: false,
+                },
+                children: [
+                  {
+                    type: "Checkbox",
+                    props: { label: "", checked: false },
+                    bindings: { itemField: "completed" },
+                    action: {
+                      type: "toggleItemField",
+                      collectionKey: "todos",
+                      field: "completed",
+                    },
+                  },
+                  {
+                    type: "Column",
+                    style: { width: "fill", padding: uniformSpacing(0) },
+                    props: {
+                      gap: 2,
+                      scrollable: false,
+                      horizontalAlignment: "start",
+                      verticalArrangement: "top",
+                      connected: false,
+                    },
+                    action: {
+                      type: "selectItem",
+                      collectionKey: "todos",
+                      targetStateKey: "editingId",
+                      populateState: {
+                        draftTitle: "title",
+                        draftNotes: "notes",
+                        draftPriority: "priority",
+                      },
+                      targetScreenId: editId,
+                      transition: "slide",
+                    },
+                    children: [
+                      {
+                        type: "Text",
+                        props: {
+                          text: "{{item.title}}",
+                          role: "titleMedium",
+                          colorToken: "onSurface",
+                          align: "left",
+                        },
+                      },
+                      {
+                        type: "Text",
+                        props: {
+                          text: "{{item.notes}}",
+                          role: "bodySmall",
+                          colorToken: "onSurfaceVariant",
+                          align: "left",
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    type: "Badge",
+                    props: { label: "{{item.priority}}", colorRole: "tertiaryContainer" },
+                  },
+                  {
+                    type: "IconButton",
+                    props: { icon: "delete", variant: "standard", toggleable: false },
+                    action: {
+                      type: "deleteItem",
+                      collectionKey: "todos",
+                      snackbarMessage: "Task deleted",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const editScreen = createBlankScreen("Task Details", "task_details", {
+    id: editId,
+    showBottomNav: false,
+    topBarProps: {
+      variant: "small",
+      title: "Task Details",
+      navigationIcon: "arrow_back",
+      navigationAction: { type: "navigateBack" },
+      actions: [],
+    },
+    bodyChildren: [
+      {
+        type: "TextField",
+        style: { width: "fill" },
+        props: {
+          label: "Title",
+          placeholder: "Enter task title...",
+          value: "",
+          variant: "outlined",
+        },
+        bindings: { stateKey: "draftTitle" },
+      },
+      {
+        type: "TextField",
+        style: { width: "fill" },
+        props: {
+          label: "Notes",
+          placeholder: "Optional task details...",
+          value: "",
+          variant: "outlined",
+        },
+        bindings: { stateKey: "draftNotes" },
+      },
+      {
+        type: "Text",
+        props: {
+          text: "Priority",
+          role: "labelLarge",
+          colorToken: "primary",
+          align: "left",
+        },
+      },
+      {
+        type: "SegmentedButton",
+        style: { width: "fill" },
+        props: {
+          options: [
+            { value: "low", label: "Low" },
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High" },
+          ],
+          selectedValue: "medium",
+        },
+        bindings: { stateKey: "draftPriority" },
+      },
+      {
+        type: "Row",
+        style: { width: "fill" },
+        props: {
+          gap: 10,
+          verticalAlignment: "center",
+          horizontalArrangement: "start",
+          wrap: false,
+          connected: false,
+        },
+        children: [
+          {
+            type: "Button",
+            style: { width: "fill" },
+            props: { label: "Save Task", variant: "filled", icon: "check", enabled: true },
+            action: {
+              type: "updateItem",
+              collectionKey: "todos",
+              idStateKey: "editingId",
+              fieldFromState: {
+                title: "draftTitle",
+                notes: "draftNotes",
+                priority: "draftPriority",
+              },
+              createIfMissing: true,
+              clearStateKeys: ["editingId", "draftTitle", "draftNotes"],
+              navigateBackAfter: true,
+              snackbarMessage: "Task saved!",
+            },
+          },
+          {
+            type: "Button",
+            style: { width: "fill" },
+            props: { label: "Delete", variant: "outlined", icon: "delete", enabled: true },
+            action: {
+              type: "deleteItem",
+              collectionKey: "todos",
+              idStateKey: "editingId",
+              navigateBackAfter: true,
+              snackbarMessage: "Task deleted",
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  return {
+    schemaVersion: 1,
+    id: "proj_todo_starter",
+    name: "Todo & Tasks",
+    packageName: "com.example.todoapp",
+    theme: { ...DEFAULT_THEME, paletteKey: "teal", seedColor: "#00696E" },
+    bottomNav: { enabled: false, destinations: [] },
+    screens: [tasksScreen, editScreen],
+    initialScreenId: tasksId,
+    state: {
+      persistenceBackend: "datastore",
+      variables: [
+        { key: "searchQuery", label: "Search Query", type: "string", defaultValue: "", persist: false },
+        { key: "filterStatus", label: "Filter Status", type: "string", defaultValue: "all", persist: true },
+        { key: "sortOrder", label: "Sort Order", type: "string", defaultValue: "newest", persist: true },
+        { key: "quickTitle", label: "Quick Task Title", type: "string", defaultValue: "", persist: false },
+        { key: "editingId", label: "Editing Task ID", type: "string", defaultValue: "", persist: false },
+        { key: "draftTitle", label: "Draft Title", type: "string", defaultValue: "", persist: false },
+        { key: "draftNotes", label: "Draft Notes", type: "string", defaultValue: "", persist: false },
+        { key: "draftPriority", label: "Draft Priority", type: "string", defaultValue: "medium", persist: false },
+      ],
+      collections: [
+        {
+          key: "todos",
+          label: "Tasks",
+          itemLabel: "Task",
+          persist: true,
+          fields: [
+            { key: "title", label: "Title", type: "string" },
+            { key: "notes", label: "Notes", type: "string" },
+            { key: "completed", label: "Completed", type: "boolean" },
+            { key: "priority", label: "Priority", type: "string" },
+            { key: "createdAt", label: "Created At", type: "number" },
+          ],
+          initialItems: [
+            {
+              id: "todo_1",
+              title: "Review Material 3 tokens",
+              notes: "Check typography scale and seed color contrast",
+              completed: false,
+              priority: "high",
+              createdAt: 1700000003000,
+            },
+            {
+              id: "todo_2",
+              title: "Export Android Studio zip",
+              notes: "Test Gradle build with DataStore persistence",
+              completed: false,
+              priority: "medium",
+              createdAt: 1700000002000,
+            },
+            {
+              id: "todo_3",
+              title: "Ship v0.2.0 Release",
+              notes: "Verify PR Playwright E2E gate passed",
+              completed: true,
+              priority: "low",
+              createdAt: 1700000001000,
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 export const STARTER_TEMPLATES: TemplateMetadata[] = [
   {
     id: "material-showcase",
@@ -518,6 +906,13 @@ export const STARTER_TEMPLATES: TemplateMetadata[] = [
     description: "4-screen app with shared bottom nav, connected buttons, cards & settings",
     icon: "auto_awesome",
     build: buildMaterialShowcase,
+  },
+  {
+    id: "todo-app",
+    name: "Todo & Tasks",
+    description: "2-screen CRUD task manager with live search, filter, sort & persistent storage",
+    icon: "checklist",
+    build: buildTodoApp,
   },
   {
     id: "settings-app",

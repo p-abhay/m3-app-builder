@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { moveNode } from "@/ast/operations";
-import type { ComponentNode, TransitionType, UserAction } from "@/ast/types";
+import type { ComponentNode, SegmentedOption, TransitionType, UserAction } from "@/ast/types";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
 import type { ColorTokenKey, TypeRole } from "@/theme/types";
@@ -122,6 +122,7 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
   const updateNodeProps = useProjectStore((s) => s.updateNodeProps);
   const updateNodeStyle = useProjectStore((s) => s.updateNodeStyle);
   const updateNodeAction = useProjectStore((s) => s.updateNodeAction);
+  const updateNodeBindings = useProjectStore((s) => s.updateNodeBindings);
 
   const [iconPickerTarget, setIconPickerTarget] = useState<{
     propKey: string;
@@ -1075,6 +1076,218 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
           </div>
         )}
 
+        {node.type === "SearchBar" && (
+          <div className="space-y-3">
+            <FieldRow label="Placeholder">
+              <input
+                type="text"
+                value={node.props.placeholder}
+                onChange={(e) => updateNodeProps(node.id, { placeholder: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Default Text">
+              <input
+                type="text"
+                value={node.props.value}
+                onChange={(e) => updateNodeProps(node.id, { value: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <IconField
+              label="Leading Icon"
+              value={node.props.leadingIcon}
+              inputStyle={inputStyle}
+              onChange={(leadingIcon) => updateNodeProps(node.id, { leadingIcon: leadingIcon ?? "search" })}
+              onOpenPicker={() =>
+                setIconPickerTarget({
+                  propKey: "leadingIcon",
+                  value: node.props.leadingIcon,
+                  allowEmpty: false,
+                })
+              }
+            />
+            <label className="flex items-center justify-between py-1">
+              <span className="font-semibold">Show Clear Button</span>
+              <input
+                type="checkbox"
+                checked={node.props.showClearButton}
+                onChange={(e) => updateNodeProps(node.id, { showClearButton: e.target.checked })}
+              />
+            </label>
+          </div>
+        )}
+
+        {node.type === "SegmentedButton" && (
+          <div className="space-y-3">
+            <FieldRow label="Selected Value">
+              <input
+                type="text"
+                value={node.props.selectedValue}
+                onChange={(e) => updateNodeProps(node.id, { selectedValue: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+                  Options ({node.props.options.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next: SegmentedOption[] = [
+                      ...node.props.options,
+                      { value: `opt${node.props.options.length + 1}`, label: "Option" },
+                    ];
+                    updateNodeProps(node.id, { options: next });
+                  }}
+                  className="text-[11px] font-semibold border-0 bg-transparent cursor-pointer"
+                  style={{ color: palette.primary }}
+                >
+                  + Add
+                </button>
+              </div>
+              {node.props.options.map((opt, idx) => (
+                <div key={`${opt.value}-${idx}`} className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    aria-label={`Option ${idx + 1} Value`}
+                    value={opt.value}
+                    onChange={(e) => {
+                      const next = node.props.options.map((o, i) =>
+                        i === idx ? { ...o, value: e.target.value } : o,
+                      );
+                      updateNodeProps(node.id, { options: next });
+                    }}
+                    className="w-20 px-2 py-1 text-xs font-mono outline-none"
+                    style={inputStyle}
+                  />
+                  <input
+                    type="text"
+                    aria-label={`Option ${idx + 1} Label`}
+                    value={opt.label}
+                    onChange={(e) => {
+                      const next = node.props.options.map((o, i) =>
+                        i === idx ? { ...o, label: e.target.value } : o,
+                      );
+                      updateNodeProps(node.id, { options: next });
+                    }}
+                    className="flex-1 min-w-0 px-2 py-1 text-xs outline-none"
+                    style={inputStyle}
+                  />
+                  {node.props.options.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = node.props.options.filter((_, i) => i !== idx);
+                        updateNodeProps(node.id, { options: next });
+                      }}
+                      className="p-1 border-0 bg-transparent cursor-pointer"
+                      style={{ color: palette.error }}
+                      title="Remove option"
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {node.type === "DataList" && (
+          <div className="space-y-3">
+            <FieldRow label="Collection Key">
+              <input
+                type="text"
+                value={node.props.collectionKey}
+                onChange={(e) => updateNodeProps(node.id, { collectionKey: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Search Variable Key">
+              <input
+                type="text"
+                value={node.props.searchStateKey ?? ""}
+                onChange={(e) =>
+                  updateNodeProps(node.id, { searchStateKey: e.target.value || undefined })
+                }
+                placeholder="e.g. searchQuery"
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Search Fields (comma-separated)">
+              <input
+                type="text"
+                value={node.props.searchFields.join(", ")}
+                onChange={(e) =>
+                  updateNodeProps(node.id, {
+                    searchFields: e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <div className="grid grid-cols-2 gap-2">
+              <FieldRow label="Filter Field">
+                <input
+                  type="text"
+                  value={node.props.filterField ?? ""}
+                  onChange={(e) =>
+                    updateNodeProps(node.id, { filterField: e.target.value || undefined })
+                  }
+                  placeholder="e.g. completed"
+                  className="w-full px-2 py-1 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+              <FieldRow label="Filter Var Key">
+                <input
+                  type="text"
+                  value={node.props.filterStateKey ?? ""}
+                  onChange={(e) =>
+                    updateNodeProps(node.id, { filterStateKey: e.target.value || undefined })
+                  }
+                  placeholder="e.g. filterStatus"
+                  className="w-full px-2 py-1 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+            </div>
+            <FieldRow label="Sort Variable Key">
+              <input
+                type="text"
+                value={node.props.sortStateKey ?? ""}
+                onChange={(e) =>
+                  updateNodeProps(node.id, { sortStateKey: e.target.value || undefined })
+                }
+                placeholder="e.g. sortOrder"
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Empty Title">
+              <input
+                type="text"
+                value={node.props.emptyTitle}
+                onChange={(e) => updateNodeProps(node.id, { emptyTitle: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          </div>
+        )}
+
         {/* Style & Layout Section */}
         <div
           className="pt-3 border-t space-y-3"
@@ -1120,6 +1333,63 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
           </FieldRow>
         </div>
 
+        {/* Data Binding Section */}
+        <div
+          className="pt-3 border-t space-y-3"
+          style={{ borderColor: palette.outlineVariant }}
+        >
+          <div
+            className="text-[11px] font-bold uppercase tracking-wider"
+            style={{ color: palette.onSurfaceVariant }}
+          >
+            Data Binding
+          </div>
+          <FieldRow label="State Variable Key">
+            <select
+              aria-label="Bound State Variable"
+              value={node.bindings?.stateKey ?? ""}
+              onChange={(e) => {
+                const stateKey = e.target.value || undefined;
+                const itemField = node.bindings?.itemField;
+                updateNodeBindings(
+                  node.id,
+                  stateKey || itemField
+                    ? { ...(stateKey ? { stateKey } : {}), ...(itemField ? { itemField } : {}) }
+                    : undefined,
+                );
+              }}
+              className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+              style={inputStyle}
+            >
+              <option value="">Unbound</option>
+              {(project.state?.variables ?? []).map((v) => (
+                <option key={v.key} value={v.key}>
+                  {v.key} ({v.type})
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+          <FieldRow label="DataList Item Field">
+            <input
+              type="text"
+              placeholder="e.g. completed"
+              value={node.bindings?.itemField ?? ""}
+              onChange={(e) => {
+                const itemField = e.target.value.trim() || undefined;
+                const stateKey = node.bindings?.stateKey;
+                updateNodeBindings(
+                  node.id,
+                  stateKey || itemField
+                    ? { ...(stateKey ? { stateKey } : {}), ...(itemField ? { itemField } : {}) }
+                    : undefined,
+                );
+              }}
+              className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+              style={inputStyle}
+            />
+          </FieldRow>
+        </div>
+
         {/* Click Action Section */}
         <div
           className="pt-3 border-t space-y-3"
@@ -1136,6 +1406,8 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               value={currentAction.type}
               onChange={(e) => {
                 const nextType = e.target.value as UserAction["type"];
+                const firstCol = project.state?.collections[0]?.key ?? "todos";
+                const firstVar = project.state?.variables[0]?.key ?? "";
                 if (nextType === "none") updateNodeAction(node.id, { type: "none" });
                 else if (nextType === "navigateBack")
                   updateNodeAction(node.id, { type: "navigateBack" });
@@ -1155,6 +1427,47 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
                     type: "openUrl",
                     url: "https://developer.android.com",
                   });
+                else if (nextType === "toggleState")
+                  updateNodeAction(node.id, { type: "toggleState", stateKey: firstVar });
+                else if (nextType === "setState")
+                  updateNodeAction(node.id, { type: "setState", stateKey: firstVar, value: "" });
+                else if (nextType === "createItem")
+                  updateNodeAction(node.id, {
+                    type: "createItem",
+                    collectionKey: firstCol,
+                    fieldFromState: { title: "quickTitle" },
+                    clearStateKeys: ["quickTitle"],
+                    snackbarMessage: "Item created",
+                  });
+                else if (nextType === "selectItem")
+                  updateNodeAction(node.id, {
+                    type: "selectItem",
+                    collectionKey: firstCol,
+                    targetStateKey: "editingId",
+                    targetScreenId: project.screens[1]?.id ?? project.screens[0]?.id,
+                    transition: "slide",
+                  });
+                else if (nextType === "updateItem")
+                  updateNodeAction(node.id, {
+                    type: "updateItem",
+                    collectionKey: firstCol,
+                    idStateKey: "editingId",
+                    fieldFromState: { title: "draftTitle" },
+                    createIfMissing: true,
+                    navigateBackAfter: true,
+                  });
+                else if (nextType === "toggleItemField")
+                  updateNodeAction(node.id, {
+                    type: "toggleItemField",
+                    collectionKey: firstCol,
+                    field: "completed",
+                  });
+                else if (nextType === "deleteItem")
+                  updateNodeAction(node.id, {
+                    type: "deleteItem",
+                    collectionKey: firstCol,
+                    snackbarMessage: "Item deleted",
+                  });
               }}
               className="w-full px-2.5 py-1.5 text-xs outline-none"
               style={inputStyle}
@@ -1164,6 +1477,13 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               <option value="navigateBack">Navigate Back</option>
               <option value="showSnackbar">Show Snackbar</option>
               <option value="openUrl">Open URL</option>
+              <option value="toggleState">Toggle State Variable</option>
+              <option value="setState">Set State Variable</option>
+              <option value="createItem">Create Collection Item</option>
+              <option value="selectItem">Select Item &amp; Edit</option>
+              <option value="updateItem">Update Collection Item</option>
+              <option value="toggleItemField">Toggle Item Field</option>
+              <option value="deleteItem">Delete Collection Item</option>
             </select>
           </FieldRow>
 
@@ -1221,6 +1541,105 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
                 style={inputStyle}
               />
             </FieldRow>
+          )}
+
+          {(currentAction.type === "toggleState" || currentAction.type === "setState") && (
+            <FieldRow label="State Variable Key">
+              <input
+                type="text"
+                value={currentAction.stateKey ?? ""}
+                onChange={(e) =>
+                  updateNodeAction(node.id, { ...currentAction, stateKey: e.target.value })
+                }
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          )}
+
+          {currentAction.type === "setState" && (
+            <FieldRow label="Value">
+              <input
+                type="text"
+                value={String(currentAction.value)}
+                onChange={(e) =>
+                  updateNodeAction(node.id, { ...currentAction, value: e.target.value })
+                }
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          )}
+
+          {(currentAction.type === "createItem" ||
+            currentAction.type === "selectItem" ||
+            currentAction.type === "updateItem" ||
+            currentAction.type === "toggleItemField" ||
+            currentAction.type === "deleteItem") && (
+            <FieldRow label="Collection Key">
+              <input
+                type="text"
+                value={currentAction.collectionKey}
+                onChange={(e) =>
+                  updateNodeAction(node.id, { ...currentAction, collectionKey: e.target.value })
+                }
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          )}
+
+          {currentAction.type === "toggleItemField" && (
+            <FieldRow label="Boolean Field Key">
+              <input
+                type="text"
+                value={currentAction.field}
+                onChange={(e) =>
+                  updateNodeAction(node.id, { ...currentAction, field: e.target.value })
+                }
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          )}
+
+          {(currentAction.type === "createItem" || currentAction.type === "updateItem") && (
+            <FieldRow label="Field Map (field=stateKey, ...)">
+              <input
+                type="text"
+                value={Object.entries(currentAction.fieldFromState)
+                  .map(([f, k]) => `${f}=${k}`)
+                  .join(", ")}
+                onChange={(e) => {
+                  const nextMap: Record<string, string> = {};
+                  for (const part of e.target.value.split(",")) {
+                    const [f, k] = part.split("=").map((s) => s.trim());
+                    if (f && k) nextMap[f] = k;
+                  }
+                  updateNodeAction(node.id, { ...currentAction, fieldFromState: nextMap });
+                }}
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          )}
+
+          {(currentAction.type === "createItem" ||
+            currentAction.type === "updateItem" ||
+            currentAction.type === "deleteItem") && (
+            <label className="flex items-center justify-between py-1">
+              <span className="font-semibold">Navigate Back After</span>
+              <input
+                type="checkbox"
+                checked={Boolean(currentAction.navigateBackAfter)}
+                onChange={(e) =>
+                  updateNodeAction(node.id, {
+                    ...currentAction,
+                    navigateBackAfter: e.target.checked,
+                  })
+                }
+              />
+            </label>
           )}
         </div>
       </div>

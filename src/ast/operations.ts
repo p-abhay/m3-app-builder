@@ -5,6 +5,7 @@ import {
   type ComponentNode,
   type ComponentStyle,
   type ComponentType,
+  type NodeBindings,
   type ScreenNode,
   type UserAction,
 } from "./types.ts";
@@ -162,6 +163,7 @@ function cloneSubtree(
     style: { ...orig.style },
     props: structuredClone(orig.props),
     action: orig.action ? { ...orig.action } : undefined,
+    ...(orig.bindings ? { bindings: { ...orig.bindings } } : {}),
   } as ComponentNode;
 
   return clonedId;
@@ -266,6 +268,25 @@ export function updateNodeAction(
       [nodeId]: {
         ...node,
         action,
+      },
+    },
+  };
+}
+
+export function updateNodeBindings(
+  screen: ScreenNode,
+  nodeId: string,
+  bindings: NodeBindings | undefined,
+): ScreenNode {
+  const node = screen.nodes[nodeId];
+  if (!node) return screen;
+  return {
+    ...screen,
+    nodes: {
+      ...screen.nodes,
+      [nodeId]: {
+        ...node,
+        bindings,
       },
     },
   };
