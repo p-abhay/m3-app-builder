@@ -8,6 +8,7 @@ import {
   type NodeBindings,
   type ScreenNode,
   type UserAction,
+  type VisibilityCondition,
 } from "./types.ts";
 
 export function isContainerType(type: ComponentType): boolean {
@@ -164,6 +165,7 @@ function cloneSubtree(
     props: structuredClone(orig.props),
     action: orig.action ? { ...orig.action } : undefined,
     ...(orig.bindings ? { bindings: { ...orig.bindings } } : {}),
+    ...(orig.visibleWhen ? { visibleWhen: { ...orig.visibleWhen } } : {}),
   } as ComponentNode;
 
   return clonedId;
@@ -287,6 +289,25 @@ export function updateNodeBindings(
       [nodeId]: {
         ...node,
         bindings,
+      },
+    },
+  };
+}
+
+export function updateNodeVisibility(
+  screen: ScreenNode,
+  nodeId: string,
+  visibleWhen: VisibilityCondition | undefined,
+): ScreenNode {
+  const node = screen.nodes[nodeId];
+  if (!node) return screen;
+  return {
+    ...screen,
+    nodes: {
+      ...screen.nodes,
+      [nodeId]: {
+        ...node,
+        visibleWhen,
       },
     },
   };

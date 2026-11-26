@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { generateGradleProject, type GradleExportFile } from "@/codegen/gradle";
+import { verifyGradleBundle } from "@/codegen/verifier";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
 import { Icon } from "./Icon";
@@ -31,6 +32,7 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
   const [targetSdk, setTargetSdk] = useState(35);
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [showPreflight, setShowPreflight] = useState(false);
 
   const bundle = useMemo(
     () =>
@@ -43,6 +45,11 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
         persistenceBackend,
       }),
     [project, m3Expressive, minSdk, targetSdk, persistenceBackend],
+  );
+
+  const preflight = useMemo(
+    () => verifyGradleBundle(project, bundle),
+    [project, bundle],
   );
 
   useEffect(() => {
@@ -95,7 +102,8 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
   };
 
   const codeLines = activeFile ? activeFile.content.split("\n") : [];
-  const warningCount = bundle.compose.diagnostics.filter((d) => d.severity === "warning").length;
+  const drawerVisible =
+    showPreflight || preflight.errorCount > 0 || preflight.warningCount > 0;
 
   return (
     <div
@@ -167,6 +175,47 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
               />
               <span>M3 Expressive Alpha APIs</span>
             </label>
+
+            <button
+              type="button"
+              data-testid="preflight-status-badge"
+              onClick={() => setShowPreflight((v) => !v)}
+              className="m3-press flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border-0 cursor-pointer"
+              style={{
+                borderRadius: shapes.full,
+                backgroundColor:
+                  preflight.errorCount > 0
+                    ? palette.errorContainer
+                    : preflight.warningCount > 0
+                      ? palette.tertiaryContainer
+                      : palette.secondaryContainer,
+                color:
+                  preflight.errorCount > 0
+                    ? palette.onErrorContainer
+                    : preflight.warningCount > 0
+                      ? palette.onTertiaryContainer
+                      : palette.onSecondaryContainer,
+              }}
+              title="Toggle Static Preflight Diagnostics"
+            >
+              <Icon
+                name={
+                  preflight.errorCount > 0
+                    ? "error"
+                    : preflight.warningCount > 0
+                      ? "warning"
+                      : "verified"
+                }
+                size={15}
+              />
+              <span>
+                {preflight.errorCount > 0
+                  ? `${preflight.errorCount} Errors`
+                  : preflight.warningCount > 0
+                    ? `${preflight.warningCount} Warnings`
+                    : `Preflight Passed (${preflight.checksRun})`}
+              </span>
+            </button>
 
             <button
               type="button"
@@ -311,26 +360,66 @@ export function ComposeExportModal({ open, onClose }: ComposeExportModalProps) {
           </label>
         </div>
 
-        {/* Diagnostics Banner */}
-        {bundle.compose.diagnostics.length > 0 && (
+        {/* Static Preflight & Diagnostics Drawer */}
+        {drawerVisible && (
           <div
-            className="px-5 py-2 border-b flex flex-wrap items-center gap-x-4 gap-y-1 text-xs shrink-0"
+            data-testid="preflight-drawer"
+            className="px-5 py-2 border-b space-y-1 text-xs shrink-0 max-h-28 overflow-y-auto"
             style={{
               borderColor: palette.outlineVariant,
-              backgroundColor: warningCount > 0 ? palette.errorContainer : palette.surfaceContainerLow,
-              color: warningCount > 0 ? palette.onErrorContainer : palette.onSurfaceVariant,
+              backgroundColor:
+                preflight.errorCount > 0
+                  ? palette.errorContainer
+                  : preflight.warningCount > 0
+                    ? `${palette.tertiaryContainer}88`
+                    : palette.surfaceContainerLow,
+              color:
+                preflight.errorCount > 0
+                  ? palette.onErrorContainer
+                  : palette.onSurfaceVariant,
             }}
           >
-            {bundle.compose.diagnostics.map((diag, idx) => (
-              <div key={idx} className="flex items-center gap-1.5">
-                <Icon
-                  name={diag.severity === "warning" ? "warning" : "info"}
-                  size={15}
-                  color={diag.severity === "warning" ? palette.error : palette.primary}
-                />
-                <span>{diag.message}</span>
+            {preflight.issues.length === 0 ? (
+              <div className="flex items-center gap-1.5 font-medium" style={{ color: palette.primary }}>
+                <Icon name="check_circle" size={15} />
+                <span>
+                  All {preflight.checksRun} static preflight checks passed (Kotlin braces, Compose icons, state bindings, routes &amp; XML).
+                </span>
               </div>
-            ))}
+            ) : (
+              preflight.issues.map((issue) => (
+                <div key={issue.id} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Icon
+                      name={
+                        issue.severity === "error"
+                          ? "error"
+                          : issue.severity === "warning"
+                            ? "warning"
+                            : "info"
+                      }
+                      size={14}
+                      color={
+                        issue.severity === "error" || issue.severity === "warning"
+                          ? palette.error
+                          : palette.primary
+                      }
+                    />
+                    <span className="truncate">{issue.message}</span>
+                  </div>
+                  {issue.filePath && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPath(issue.filePath!)}
+                      className="text-[10px] font-semibold underline border-0 bg-transparent cursor-pointer shrink-0"
+                      style={{ color: palette.primary }}
+                    >
+                      Open {issue.shortName || "file"}
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         )}
 

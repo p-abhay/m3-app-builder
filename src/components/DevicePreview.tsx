@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { AnimatePresence, motion } from "motion/react";
 import { createNode } from "@/ast/factory";
-import type { ComponentType, TransitionType } from "@/ast/types";
+import { OVERLAY_TYPES, type ComponentType, type TransitionType } from "@/ast/types";
 import { usePreviewStore } from "@/store/usePreviewStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
@@ -75,10 +75,12 @@ export function DevicePreview() {
 
   const navStack = usePreviewStore((s) => s.navStack);
   const isBack = usePreviewStore((s) => s.isBack);
+  const activeOverlayNodeId = usePreviewStore((s) => s.activeOverlayNodeId);
   const snackbar = usePreviewStore((s) => s.snackbar);
   const goBack = usePreviewStore((s) => s.goBack);
   const switchTabScreen = usePreviewStore((s) => s.switchTabScreen);
   const resetPreview = usePreviewStore((s) => s.resetPreview);
+  const dismissOverlay = usePreviewStore((s) => s.dismissOverlay);
   const dismissSnackbar = usePreviewStore((s) => s.dismissSnackbar);
 
   const [viewport, setViewport] = useState<"phone" | "tablet">("phone");
@@ -124,6 +126,10 @@ export function DevicePreview() {
     project.bottomNav.enabled &&
     activeScreen.showBottomNav &&
     project.bottomNav.destinations.length > 0;
+  const showNavRail = showSharedBottomNav && viewport === "tablet";
+  const showBottomBar = showSharedBottomNav && viewport !== "tablet";
+  const activeOverlayNode =
+    isPreview && activeOverlayNodeId ? activeScreen.nodes[activeOverlayNodeId] : undefined;
 
   const handleQuickAdd = (type: ComponentType) => {
     if (type === "FloatingActionButton") {
@@ -139,9 +145,10 @@ export function DevicePreview() {
     }
 
     const selectedNode = selectedNodeId ? activeScreen.nodes[selectedNodeId] : undefined;
-    const targetParentId = isNodeContainer(selectedNode)
-      ? selectedNode!.id
-      : activeScreen.slots.bodyId;
+    const targetParentId =
+      !OVERLAY_TYPES.has(type) && isNodeContainer(selectedNode)
+        ? selectedNode!.id
+        : activeScreen.slots.bodyId;
 
     insertNode(targetParentId, createNode(type));
   };
@@ -227,6 +234,48 @@ export function DevicePreview() {
               <Icon name="add_circle_outline" size={16} />
               <span>FAB</span>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Material 3 Overlay Scrim (AlertDialog & ModalBottomSheet in Preview Mode) */}
+      {isPreview && activeOverlayNode && OVERLAY_TYPES.has(activeOverlayNode.type) && (
+        <div
+          data-testid="preview-overlay-scrim"
+          onClick={dismissOverlay}
+          className={`absolute inset-0 z-30 flex ${
+            activeOverlayNode.type === "ModalBottomSheet"
+              ? "items-end justify-center"
+              : "items-center justify-center p-5"
+          }`}
+          style={{ backgroundColor: "rgba(0,0,0,0.46)" }}
+        >
+          {activeOverlayNode.type === "ModalBottomSheet" ? (
+            <motion.div
+              initial={{ y: 40, opacity: 0.7 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.2 }}
+              className="w-full"
+            >
+              <M3NodeRenderer
+                screen={activeScreen}
+                nodeId={activeOverlayNode.id}
+                forceRenderOverlay
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.16 }}
+              className="w-full max-w-[320px]"
+            >
+              <M3NodeRenderer
+                screen={activeScreen}
+                nodeId={activeOverlayNode.id}
+                forceRenderOverlay
+              />
+            </motion.div>
           )}
         </div>
       )}
@@ -434,28 +483,73 @@ export function DevicePreview() {
           </div>
         </div>
 
-        {/* Screen Body Area (with animated transitions in Preview mode) */}
-        {isPreview ? (
-          <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={activeScreen.id}
-                variants={motionVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="flex-1 min-h-0 flex flex-col"
-              >
-                {screenContent}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        ) : (
-          screenContent
-        )}
+        {/* Screen Body Area (with animated transitions + adaptive NavigationRail on Tablet) */}
+        <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden">
+          {showNavRail && (
+            <div
+              data-testid="shared-nav-rail"
+              className="w-20 shrink-0 py-3 px-1.5 flex flex-col items-center gap-2 border-r"
+              style={{
+                backgroundColor: palette.surfaceContainer,
+                borderColor: palette.outlineVariant,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {project.bottomNav.destinations.map((dest) => {
+                const active = dest.targetScreenId === activeScreen.id;
+                return (
+                  <button
+                    key={dest.id}
+                    type="button"
+                    onClick={() =>
+                      isPreview
+                        ? switchTabScreen(dest.targetScreenId)
+                        : setActiveScreen(dest.targetScreenId)
+                    }
+                    className="flex flex-col items-center gap-1 py-1.5 px-2 border-0 bg-transparent cursor-pointer w-full"
+                    style={{ color: active ? palette.onSurface : palette.onSurfaceVariant }}
+                  >
+                    <span
+                      className="w-12 h-7 flex items-center justify-center transition-colors"
+                      style={{
+                        borderRadius: shapes.full,
+                        backgroundColor: active ? palette.secondaryContainer : "transparent",
+                        color: active ? palette.onSecondaryContainer : palette.onSurfaceVariant,
+                      }}
+                    >
+                      <Icon name={dest.icon} size={20} fill={active} />
+                    </span>
+                    <span className="text-[10px] font-semibold truncate w-full text-center">
+                      {dest.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        {/* Shared Bottom Navigation Bar */}
-        {showSharedBottomNav && (
+          {isPreview ? (
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={activeScreen.id}
+                  variants={motionVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="flex-1 min-h-0 flex flex-col"
+                >
+                  {screenContent}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          ) : (
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col">{screenContent}</div>
+          )}
+        </div>
+
+        {/* Shared Bottom Navigation Bar (Compact Phone) */}
+        {showBottomBar && (
           <div
             data-testid="shared-bottom-nav"
             className="shrink-0 pt-2 pb-1 px-3 flex items-center justify-around"
@@ -501,7 +595,7 @@ export function DevicePreview() {
           className="h-6 shrink-0 flex items-center justify-center"
           style={{
             backgroundColor: theme.systemBars.edgeToEdge
-              ? showSharedBottomNav
+              ? showBottomBar
                 ? palette.surfaceContainer
                 : screenBg
               : palette.surfaceContainerHighest,

@@ -1,4 +1,4 @@
-import type { AppStateConfig, CollectionRecord } from "./types.ts";
+import type { AppStateConfig, CollectionRecord, VisibilityCondition } from "./types.ts";
 
 export function createEmptyAppState(): AppStateConfig {
   return {
@@ -125,4 +125,43 @@ export function resolveTemplateString(
     }
     return match;
   });
+}
+
+/**
+ * Evaluate conditional node visibility rules against runtime preview/default variable values.
+ */
+export function evaluateVisibility(
+  condition: VisibilityCondition | undefined,
+  values: Record<string, unknown>,
+  fallbackDefaults?: Record<string, unknown>,
+): boolean {
+  if (!condition || !condition.stateKey.trim()) return true;
+  const raw =
+    condition.stateKey in values
+      ? values[condition.stateKey]
+      : fallbackDefaults?.[condition.stateKey];
+
+  const isTruthy =
+    typeof raw === "string"
+      ? raw.trim().length > 0 && raw.trim().toLowerCase() !== "false"
+      : Boolean(raw);
+
+  switch (condition.operator) {
+    case "truthy":
+      return isTruthy;
+    case "falsy":
+      return !isTruthy;
+    case "equals":
+      return (
+        String(raw ?? "").trim().toLowerCase() ===
+        String(condition.value ?? "").trim().toLowerCase()
+      );
+    case "notEquals":
+      return (
+        String(raw ?? "").trim().toLowerCase() !==
+        String(condition.value ?? "").trim().toLowerCase()
+      );
+    default:
+      return true;
+  }
 }

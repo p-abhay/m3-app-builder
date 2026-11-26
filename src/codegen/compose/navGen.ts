@@ -33,31 +33,58 @@ export function generateNavAndActivityFiles(
 
   const navBarLines = hasBottomNav
     ? [
+        `            val navRoutes = setOf(${[...showNavScreens].filter(Boolean).map(kotlinString).join(", ")})`,
+        "            val isTablet = maxWidth >= 600.dp",
+        "            val showRail = isTablet && (currentRoute in navRoutes)",
         "            val sharedBottomBar: @Composable () -> Unit = {",
-        "                NavigationBar {",
+        "                if (!isTablet) {",
+        "                    NavigationBar {",
         ...validDestinations.flatMap((dest) => {
           const destRoute = routeMap.get(dest.targetScreenId)!;
           return [
-            "                    NavigationBarItem(",
-            `                        selected = currentRoute == ${kotlinString(destRoute)},`,
-            "                        onClick = {",
-            `                            if (currentRoute != ${kotlinString(destRoute)}) {`,
-            `                                navController.navigate(${kotlinString(destRoute)}) {`,
-            `                                    popUpTo(${kotlinString(startRoute)}) { saveState = true }`,
-            "                                    launchSingleTop = true",
-            "                                    restoreState = true",
+            "                        NavigationBarItem(",
+            `                            selected = currentRoute == ${kotlinString(destRoute)},`,
+            "                            onClick = {",
+            `                                if (currentRoute != ${kotlinString(destRoute)}) {`,
+            `                                    navController.navigate(${kotlinString(destRoute)}) {`,
+            `                                        popUpTo(${kotlinString(startRoute)}) { saveState = true }`,
+            "                                        launchSingleTop = true",
+            "                                        restoreState = true",
+            "                                    }",
             "                                }",
-            "                            }",
-            "                        },",
-            `                        icon = { Icon(${toMaterialIconRef(dest.icon)}, contentDescription = ${kotlinString(dest.label)}) },`,
-            `                        label = { Text(${kotlinString(dest.label)}) },`,
-            "                    )",
+            "                            },",
+            `                            icon = { Icon(${toMaterialIconRef(dest.icon)}, contentDescription = ${kotlinString(dest.label)}) },`,
+            `                            label = { Text(${kotlinString(dest.label)}) },`,
+            "                        )",
           ];
         }),
+        "                    }",
         "                }",
         "            }",
       ]
     : ["            val sharedBottomBar: @Composable () -> Unit = {}"];
+
+  const railItemsLines = hasBottomNav
+    ? validDestinations.flatMap((dest) => {
+        const destRoute = routeMap.get(dest.targetScreenId)!;
+        return [
+          "                    NavigationRailItem(",
+          `                        selected = currentRoute == ${kotlinString(destRoute)},`,
+          "                        onClick = {",
+          `                            if (currentRoute != ${kotlinString(destRoute)}) {`,
+          `                                navController.navigate(${kotlinString(destRoute)}) {`,
+          `                                    popUpTo(${kotlinString(startRoute)}) { saveState = true }`,
+          "                                    launchSingleTop = true",
+          "                                    restoreState = true",
+          "                                }",
+          "                            }",
+          "                        },",
+          `                        icon = { Icon(${toMaterialIconRef(dest.icon)}, contentDescription = ${kotlinString(dest.label)}) },`,
+          `                        label = { Text(${kotlinString(dest.label)}) },`,
+          "                    )",
+        ];
+      })
+    : [];
 
   const composableEntries = project.screens.flatMap((screen) => {
     const fnName = screenNameMap.get(screen.id)!;
@@ -80,11 +107,18 @@ export function generateNavAndActivityFiles(
   const navHostLines = [
     `package ${pkg}.ui.navigation`,
     "",
+    "import androidx.compose.foundation.layout.Box",
+    "import androidx.compose.foundation.layout.BoxWithConstraints",
+    "import androidx.compose.foundation.layout.Row",
+    "import androidx.compose.foundation.layout.fillMaxHeight",
+    "import androidx.compose.foundation.layout.fillMaxSize",
     "import androidx.compose.material.icons.Icons",
     "import androidx.compose.material.icons.automirrored.rounded.*",
     "import androidx.compose.material.icons.rounded.*",
     "import androidx.compose.material3.*",
     "import androidx.compose.runtime.*",
+    "import androidx.compose.ui.Modifier",
+    "import androidx.compose.ui.unit.dp",
     ...(hasAppState
       ? [
           "import androidx.compose.ui.platform.LocalContext",
@@ -114,11 +148,31 @@ export function generateNavAndActivityFiles(
     "    val backStackEntry by navController.currentBackStackEntryAsState()",
     "    val currentRoute = backStackEntry?.destination?.route",
     "",
-    ...navBarLines.map((l) => l.replace(/^ {12}/, "    ")),
-    "",
-    `    NavHost(navController = navController, startDestination = ${kotlinString(startRoute)}) {`,
-    ...composableEntries.map((l) => l.replace(/^ {4}/, "")),
-    "    }",
+    ...(hasBottomNav
+      ? [
+          "    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {",
+          ...navBarLines.map((l) => l.replace(/^ {4}/, "")),
+          "",
+          "        Row(modifier = Modifier.fillMaxSize()) {",
+          "            if (showRail) {",
+          "                NavigationRail(modifier = Modifier.fillMaxHeight()) {",
+          ...railItemsLines,
+          "                }",
+          "            }",
+          "            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {",
+          `                NavHost(navController = navController, startDestination = ${kotlinString(startRoute)}) {`,
+          ...composableEntries.map((l) => `        ${l}`),
+          "                }",
+          "            }",
+          "        }",
+          "    }",
+        ]
+      : [
+          "    val sharedBottomBar: @Composable () -> Unit = {}",
+          `    NavHost(navController = navController, startDestination = ${kotlinString(startRoute)}) {`,
+          ...composableEntries.map((l) => l.replace(/^ {4}/, "")),
+          "    }",
+        ]),
     "}",
     "",
   ];

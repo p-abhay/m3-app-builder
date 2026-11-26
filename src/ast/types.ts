@@ -31,7 +31,13 @@ export type ComponentType =
   // State, Search & Lists (v0.3.0)
   | "SearchBar"
   | "SegmentedButton"
-  | "DataList";
+  | "DataList"
+  // Core Building Blocks & Overlays (v0.4.0)
+  | "DropdownMenu"
+  | "RadioGroup"
+  | "Tabs"
+  | "AlertDialog"
+  | "ModalBottomSheet";
 
 export const CONTAINER_TYPES: ReadonlySet<ComponentType> = new Set([
   "Column",
@@ -39,6 +45,12 @@ export const CONTAINER_TYPES: ReadonlySet<ComponentType> = new Set([
   "Box",
   "Card",
   "DataList",
+  "ModalBottomSheet",
+]);
+
+export const OVERLAY_TYPES: ReadonlySet<ComponentType> = new Set([
+  "AlertDialog",
+  "ModalBottomSheet",
 ]);
 
 export type SpacingBox = {
@@ -100,6 +112,12 @@ export interface NodeBindings {
   itemField?: string;
 }
 
+export interface VisibilityCondition {
+  stateKey: string;
+  operator: "truthy" | "falsy" | "equals" | "notEquals";
+  value?: string;
+}
+
 export interface SegmentedOption {
   value: string;
   label: string;
@@ -152,7 +170,9 @@ export type UserAction =
       idStateKey?: string;
       navigateBackAfter?: boolean;
       snackbarMessage?: string;
-    };
+    }
+  | { type: "openOverlay"; targetNodeId: string }
+  | { type: "dismissOverlay" };
 
 export interface TopAppBarActionItem {
   id: string;
@@ -313,6 +333,35 @@ export interface NodePropsMap {
     emptyTitle: string;
     emptySubtitle?: string;
   };
+  DropdownMenu: {
+    label: string;
+    options: SegmentedOption[];
+    selectedValue: string;
+    placeholder: string;
+    variant: "outlined" | "filled";
+  };
+  RadioGroup: {
+    label: string;
+    options: SegmentedOption[];
+    selectedValue: string;
+  };
+  Tabs: {
+    options: SegmentedOption[];
+    selectedValue: string;
+    variant: "primary" | "secondary";
+  };
+  AlertDialog: {
+    title: string;
+    message: string;
+    icon?: string;
+    confirmLabel: string;
+    dismissLabel?: string;
+    confirmAction?: UserAction;
+  };
+  ModalBottomSheet: {
+    title?: string;
+    dragHandle: boolean;
+  };
 }
 
 export type ComponentNode = {
@@ -326,6 +375,7 @@ export type ComponentNode = {
     props: NodePropsMap[K];
     action?: UserAction;
     bindings?: NodeBindings;
+    visibleWhen?: VisibilityCondition;
   };
 }[ComponentType];
 

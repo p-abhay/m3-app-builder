@@ -29,6 +29,7 @@ interface PreviewStoreState {
   isBack: boolean;
   values: Record<string, unknown>;
   collections: Record<string, (CollectionRecord & { id: string })[]>;
+  activeOverlayNodeId: string | null;
   snackbar: SnackbarState | null;
 
   startPreview: (initialScreenId: string, projectId?: string, stateConfig?: AppStateConfig) => void;
@@ -37,6 +38,8 @@ interface PreviewStoreState {
   switchTabScreen: (screenId: string) => void;
   goBack: () => void;
   setValue: (key: string, value: unknown) => void;
+  openOverlay: (nodeId: string) => void;
+  dismissOverlay: () => void;
   showSnackbar: (message: string) => void;
   dismissSnackbar: () => void;
   executeAction: (
@@ -154,6 +157,7 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
   isBack: false,
   values: {},
   collections: {},
+  activeOverlayNodeId: null,
   snackbar: null,
 
   startPreview: (initialScreenId, projectId, stateConfig) => {
@@ -167,6 +171,7 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
       isBack: false,
       values,
       collections,
+      activeOverlayNodeId: null,
       snackbar: null,
     });
   },
@@ -187,6 +192,7 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
       isBack: false,
       values,
       collections,
+      activeOverlayNodeId: null,
       snackbar: null,
     });
   },
@@ -198,6 +204,7 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
       return {
         navStack: [...state.navStack, { screenId, transition }],
         isBack: false,
+        activeOverlayNodeId: null,
       };
     }),
 
@@ -208,15 +215,20 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
       return {
         navStack: [{ screenId, transition: "fade" }],
         isBack: false,
+        activeOverlayNodeId: null,
       };
     }),
 
   goBack: () =>
     set((state) => {
+      if (state.activeOverlayNodeId) {
+        return { activeOverlayNodeId: null };
+      }
       if (state.navStack.length <= 1) return state;
       return {
         navStack: state.navStack.slice(0, -1),
         isBack: true,
+        activeOverlayNodeId: null,
       };
     }),
 
@@ -226,6 +238,10 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
       persistRuntimeSnapshot(state.projectId, state.appStateConfig, nextValues, state.collections);
       return { values: nextValues };
     }),
+
+  openOverlay: (nodeId) => set({ activeOverlayNodeId: nodeId }),
+
+  dismissOverlay: () => set({ activeOverlayNodeId: null }),
 
   showSnackbar: (message) =>
     set({
@@ -419,6 +435,12 @@ export const usePreviewStore = create<PreviewStoreState>((set, get) => ({
         if (action.navigateBackAfter) goBack();
         break;
       }
+      case "openOverlay":
+        set({ activeOverlayNodeId: action.targetNodeId });
+        break;
+      case "dismissOverlay":
+        set({ activeOverlayNodeId: null });
+        break;
     }
   },
 }));

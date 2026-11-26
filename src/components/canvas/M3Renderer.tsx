@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type CSSProperties, type MouseEvent } from "react";
+import { createContext, useContext, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -7,9 +7,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { queryCollection, resolveTemplateString } from "@/ast/state";
+import { evaluateVisibility, queryCollection, resolveTemplateString } from "@/ast/state";
 import {
   CONTAINER_TYPES,
+  OVERLAY_TYPES,
   type CollectionRecord,
   type ComponentNode,
   type ScreenNode,
@@ -25,6 +26,7 @@ interface M3NodeRendererProps {
   screen: ScreenNode;
   nodeId: string;
   connectedInfo?: { index: number; total: number; axis: "row" | "column" };
+  forceRenderOverlay?: boolean;
 }
 
 interface ItemScope {
@@ -61,7 +63,12 @@ function resolveBg(
   return palette[token];
 }
 
-export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRendererProps) {
+export function M3NodeRenderer({
+  screen,
+  nodeId,
+  connectedInfo,
+  forceRenderOverlay = false,
+}: M3NodeRendererProps) {
   const { palette, shapes, spacing, scaleR, typeStyle } = useM3Theme();
   const project = useProjectStore((s) => s.project);
   const selectedNodeId = useProjectStore((s) => s.selectedNodeId);
@@ -72,6 +79,8 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
   const previewCollections = usePreviewStore((s) => s.collections);
   const setPreviewValue = usePreviewStore((s) => s.setValue);
   const executeAction = usePreviewStore((s) => s.executeAction);
+  const dismissOverlay = usePreviewStore((s) => s.dismissOverlay);
+  const [menuOpen, setMenuOpen] = useState(false);
   const itemScope = useContext(ItemScopeContext);
   const itemCtx = itemScope
     ? { collectionKey: itemScope.collectionKey, item: itemScope.item }
@@ -125,6 +134,24 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
   };
 
   if (!node) return null;
+
+  // Hide overlays inline in Preview (rendered via DevicePreview modal scrim unless forceRenderOverlay)
+  if (isPreview && OVERLAY_TYPES.has(node.type) && !forceRenderOverlay) {
+    return null;
+  }
+
+  const defaultVars: Record<string, unknown> = {};
+  for (const v of project.state?.variables ?? []) {
+    defaultVars[v.key] = v.defaultValue;
+  }
+  const matchesCondition = evaluateVisibility(
+    node.visibleWhen,
+    isPreview ? previewValues : defaultVars,
+    defaultVars,
+  );
+  if (isPreview && !matchesCondition) {
+    return null;
+  }
 
   const isSelected = !isPreview && selectedNodeId === node.id;
   const scopedKey = itemScope ? `${node.id}::${itemScope.item.id}` : node.id;
@@ -241,7 +268,7 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
       ? {
           transform: CSS.Translate.toString(transform),
           transition: sortTransition,
-          opacity: isDragging ? 0.4 : 1,
+          opacity: isDragging ? 0.4 : !matchesCondition && node.visibleWhen ? 0.55 : 1,
         }
       : {};
 
@@ -1585,6 +1612,382 @@ export function M3NodeRenderer({ screen, nodeId, connectedInfo }: M3NodeRenderer
                 ))}
               </SortableContext>
             </ItemScopeContext.Provider>
+          )}
+        </div>
+      );
+    }
+
+    case "DropdownMenu": {
+      const { label, options, selectedValue, placeholder, variant } = node.props;
+      const currentValue = readBoundString(selectedValue);
+      const selectedOpt = options.find((o) => o.value === currentValue);
+      const isFilled = variant === "filled";
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={(e) => {
+            if (isPreview) {
+              e.stopPropagation();
+              setMenuOpen((prev) => !prev);
+              return;
+            }
+            handleNodeClick(e);
+          }}
+          className="relative w-full cursor-pointer"
+          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+        >
+          <div
+            className="px-3.5 py-2 flex items-center justify-between gap-2"
+            style={{
+              backgroundColor: isFilled ? palette.surfaceContainerHighest : palette.surface,
+              borderRadius: isFilled
+                ? `${shapes.extraSmall}px ${shapes.extraSmall}px 0 0`
+                : shapes.small,
+              border: isFilled ? "none" : `1px solid ${palette.outline}`,
+              borderBottom: isFilled ? `2px solid ${palette.primary}` : `1px solid ${palette.outline}`,
+            }}
+          >
+            <div className="min-w-0">
+              <div style={{ ...typeStyle("labelSmall"), color: palette.primary }}>{label}</div>
+              <div
+                className="truncate"
+                style={{
+                  ...typeStyle("bodyMedium"),
+                  color: selectedOpt ? palette.onSurface : palette.onSurfaceVariant,
+                }}
+              >
+                {selectedOpt?.label || currentValue || placeholder}
+              </div>
+            </div>
+            <Icon
+              name={menuOpen ? "arrow_drop_up" : "arrow_drop_down"}
+              size={20}
+              color={palette.onSurfaceVariant}
+            />
+          </div>
+
+          {isPreview && menuOpen && (
+            <div
+              role="listbox"
+              aria-label={label}
+              className="absolute left-0 right-0 top-full mt-1 z-30 py-1 border shadow-lg max-h-48 overflow-y-auto"
+              style={{
+                borderRadius: shapes.small,
+                backgroundColor: palette.surfaceContainer,
+                borderColor: palette.outlineVariant,
+              }}
+            >
+              {options.map((opt) => {
+                const active = opt.value === currentValue;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      writeBoundValue(opt.value);
+                      setMenuOpen(false);
+                      if (node.action && node.action.type !== "none") {
+                        executeAction(node.action, availableScreenIds, itemCtx);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs flex items-center justify-between border-0 cursor-pointer"
+                    style={{
+                      backgroundColor: active ? palette.secondaryContainer : "transparent",
+                      color: active ? palette.onSecondaryContainer : palette.onSurface,
+                    }}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                    {active && <Icon name="check" size={15} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case "RadioGroup": {
+      const { label, options, selectedValue } = node.props;
+      const currentValue = readBoundString(selectedValue);
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={handleNodeClick}
+          role="radiogroup"
+          aria-label={label}
+          className={`w-full space-y-1.5 ${!isPreview ? "cursor-pointer" : ""}`}
+          style={{ ...dndTransformStyle, ...selectionRingStyle }}
+        >
+          {label && (
+            <div style={{ ...typeStyle("labelLarge"), color: palette.primary }}>
+              {resolveStr(label)}
+            </div>
+          )}
+          <div className="space-y-1">
+            {options.map((opt) => {
+              const selected = currentValue === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={(e) => {
+                    if (isPreview) {
+                      e.stopPropagation();
+                      writeBoundValue(opt.value);
+                      if (node.action && node.action.type !== "none") {
+                        executeAction(node.action, availableScreenIds, itemCtx);
+                      }
+                      return;
+                    }
+                    handleNodeClick(e);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2 py-1.5 border-0 bg-transparent text-left cursor-pointer"
+                  style={{
+                    borderRadius: shapes.small,
+                    color: palette.onSurface,
+                  }}
+                >
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                    style={{
+                      border: `2px solid ${selected ? palette.primary : palette.outline}`,
+                    }}
+                  >
+                    {selected && (
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: palette.primary }}
+                      />
+                    )}
+                  </span>
+                  <span style={typeStyle("bodyMedium")}>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    case "Tabs": {
+      const { options, selectedValue, variant } = node.props;
+      const currentValue = readBoundString(selectedValue || options[0]?.value || "");
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={handleNodeClick}
+          role="tablist"
+          className={`w-full flex items-stretch border-b ${!isPreview ? "cursor-pointer" : ""}`}
+          style={{
+            borderColor: palette.outlineVariant,
+            backgroundColor: resolveBg(node.style.backgroundToken, palette) ?? palette.surface,
+            ...dndTransformStyle,
+            ...selectionRingStyle,
+          }}
+        >
+          {options.map((opt) => {
+            const active = currentValue === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={(e) => {
+                  if (isPreview) {
+                    e.stopPropagation();
+                    writeBoundValue(opt.value);
+                    if (node.action && node.action.type !== "none") {
+                      executeAction(node.action, availableScreenIds, itemCtx);
+                    }
+                    return;
+                  }
+                  handleNodeClick(e);
+                }}
+                className="flex-1 py-2.5 px-2 flex flex-col items-center justify-center gap-1 border-0 bg-transparent cursor-pointer relative min-w-0"
+                style={{
+                  ...typeStyle("titleSmall"),
+                  color: active ? palette.primary : palette.onSurfaceVariant,
+                }}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {variant === "primary" && opt.icon && <Icon name={opt.icon} size={16} />}
+                  <span className="truncate">{opt.label}</span>
+                </div>
+                {active && (
+                  <span
+                    className="absolute bottom-0 left-3 right-3 h-[3px]"
+                    style={{
+                      backgroundColor: palette.primary,
+                      borderRadius: `${shapes.extraSmall}px ${shapes.extraSmall}px 0 0`,
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    case "AlertDialog": {
+      const { title, message, icon, confirmLabel, dismissLabel, confirmAction } = node.props;
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={isPreview ? (e) => e.stopPropagation() : handleNodeClick}
+          role="dialog"
+          aria-modal={isPreview}
+          className={`w-full p-5 space-y-3 border shadow-md ${!isPreview ? "cursor-pointer" : ""}`}
+          style={{
+            borderRadius: shapes.extraLarge,
+            backgroundColor: palette.surfaceContainerHigh,
+            borderColor: palette.outlineVariant,
+            color: palette.onSurface,
+            ...dndTransformStyle,
+            ...selectionRingStyle,
+          }}
+        >
+          {!isPreview && (
+            <div
+              className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider"
+              style={{ color: palette.primary }}
+            >
+              <span>Overlay • AlertDialog</span>
+              <span className="font-mono opacity-75">{node.id}</span>
+            </div>
+          )}
+          <div className="flex flex-col items-center text-center gap-2">
+            {icon && <Icon name={icon} size={24} color={palette.secondary} />}
+            <div style={typeStyle("headlineSmall")}>{resolveStr(title)}</div>
+          </div>
+          <div style={{ ...typeStyle("bodyMedium"), color: palette.onSurfaceVariant }}>
+            {resolveStr(message)}
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            {dismissLabel && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  if (isPreview) {
+                    e.stopPropagation();
+                    dismissOverlay();
+                    return;
+                  }
+                  handleNodeClick(e);
+                }}
+                className="m3-press px-3 py-1.5 border-0 bg-transparent cursor-pointer"
+                style={{ ...typeStyle("labelLarge"), color: palette.primary, borderRadius: shapes.full }}
+              >
+                {dismissLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                if (isPreview) {
+                  e.stopPropagation();
+                  if (confirmAction && confirmAction.type !== "none") {
+                    executeAction(confirmAction, availableScreenIds, itemCtx);
+                  }
+                  if (confirmAction?.type !== "openOverlay") {
+                    dismissOverlay();
+                  }
+                  return;
+                }
+                handleNodeClick(e);
+              }}
+              className="m3-press px-4 py-1.5 border-0 cursor-pointer"
+              style={{
+                ...typeStyle("labelLarge"),
+                borderRadius: shapes.full,
+                backgroundColor: palette.primary,
+                color: palette.onPrimary,
+              }}
+            >
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    case "ModalBottomSheet": {
+      const { title, dragHandle } = node.props;
+
+      return (
+        <div
+          ref={setMergedRef}
+          {...commonAttrs}
+          onClick={isPreview ? (e) => e.stopPropagation() : handleNodeClick}
+          role="dialog"
+          aria-modal={isPreview}
+          className={`w-full p-4 space-y-3 border shadow-md ${!isPreview ? "cursor-pointer" : ""}`}
+          style={{
+            borderRadius: isPreview
+              ? `${shapes.extraLarge}px ${shapes.extraLarge}px 0 0`
+              : shapes.extraLarge,
+            backgroundColor: palette.surfaceContainerLow,
+            borderColor: palette.outlineVariant,
+            color: palette.onSurface,
+            ...dndTransformStyle,
+            ...selectionRingStyle,
+          }}
+        >
+          {!isPreview && (
+            <div
+              className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider"
+              style={{ color: palette.primary }}
+            >
+              <span>Overlay • BottomSheet</span>
+              <span className="font-mono opacity-75">{node.id}</span>
+            </div>
+          )}
+          {dragHandle && (
+            <div className="flex justify-center">
+              <span
+                className="w-9 h-1 rounded-full"
+                style={{ backgroundColor: palette.onSurfaceVariant, opacity: 0.4 }}
+              />
+            </div>
+          )}
+          {title && <div style={typeStyle("titleMedium")}>{resolveStr(title)}</div>}
+          {node.childIds.length === 0 && !isPreview ? (
+            <div
+              className="p-4 text-center text-xs border border-dashed"
+              style={{
+                borderRadius: shapes.medium,
+                borderColor: palette.outlineVariant,
+                color: palette.onSurfaceVariant,
+              }}
+            >
+              Drop sheet content (Column, ListItem, Button...)
+            </div>
+          ) : (
+            <SortableContext
+              items={node.childIds.map((cid) => `canvas:${cid}`)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="flex flex-col gap-2">
+                {node.childIds.map((cid) => (
+                  <M3NodeRenderer key={cid} screen={screen} nodeId={cid} />
+                ))}
+              </div>
+            </SortableContext>
           )}
         </div>
       );

@@ -1,4 +1,10 @@
-import type { AppStateConfig, ComponentNode, NodeOfType, ScreenNode } from "../../ast/types.ts";
+import {
+  OVERLAY_TYPES,
+  type AppStateConfig,
+  type ComponentNode,
+  type NodeOfType,
+  type ScreenNode,
+} from "../../ast/types.ts";
 import type { ComposeDiagnostic, GeneratedKotlinFile } from "./types.ts";
 import {
   actionStatements,
@@ -11,6 +17,7 @@ import {
   toCamelCase,
   toMaterialIconRef,
   toPascalCase,
+  visibilityConditionExpr,
   type ActionContextOptions,
   type ModifierOptions,
 } from "./utils.ts";
@@ -22,11 +29,17 @@ interface ScreenGenContext {
   hasAppState: boolean;
   appStateConfig?: AppStateConfig;
   variableDefaults: Map<string, string | boolean | number>;
+  variableTypes: Map<string, "string" | "boolean" | "number">;
+  collectionFieldTypes: Map<string, Map<string, "string" | "boolean" | "number">>;
+  overlayIds: Set<string>;
+  overlayBlocks: string[][];
+  hasOverlayState: boolean;
   stateDecls: string[];
   stateCounter: Record<string, number>;
   diagnostics: ComposeDiagnostic[];
   needsExperimentalLayout: boolean;
   needsLazyList: boolean;
+  needsSelection: boolean;
   reportedNestedScrollWarning: boolean;
 }
 
@@ -51,6 +64,15 @@ function actionOpts(ctx: ScreenGenContext, scope: ChildScope): ActionContextOpti
     hasAppState: ctx.hasAppState,
     inItemScope: scope.inItemScope,
     variableDefaults: ctx.variableDefaults,
+    variableTypes: ctx.variableTypes,
+    collectionFieldTypes: ctx.collectionFieldTypes,
+    overlayIds: ctx.overlayIds,
+    onBrokenOverlay: (targetNodeId) =>
+      ctx.diagnostics.push({
+        severity: "warning",
+        screenId: ctx.screen.id,
+        message: `Screen "${ctx.screen.name}" opens missing overlay node "${targetNodeId}".`,
+      }),
   };
 }
 
@@ -664,6 +686,203 @@ function emitProgressOrLoader(
   return [];
 }
 
+function emitDropdownMenu(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"DropdownMenu">,
+  scope: ChildScope,
+): string[] {
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
+  const options = node.props.options.length
+    ? node.props.options
+    : [{ value: "default", label: "Default" }];
+  const { valueExpr, assignExpr } = resolveBoundState(
+    ctx,
+    node,
+    toCamelCase(node.props.label || "dropdownValue"),
+    kotlinString(node.props.selectedValue || options[0].value),
+  );
+  const expVar = nextStateVar(ctx, toCamelCase(node.props.label || "dropdown") + "Expanded");
+  ctx.stateDecls.push(`var ${expVar} by remember { mutableStateOf(false) }`);
+  const actionExtra = emitActionBody(ctx, node, scope);
+  const tfFn = node.props.variant === "filled" ? "TextField" : "OutlinedTextField";
+
+  const itemsLines = options.flatMap((opt) => {
+    const valLit = kotlinString(opt.value);
+    const clickBody = `${assignExpr(valLit)}; ${expVar} = false${actionExtra ? `; ${actionExtra}` : ""}`;
+    return [
+      "        DropdownMenuItem(",
+      `            text = { Text(${kotlinString(opt.label)}) },`,
+      `            onClick = { ${clickBody} },`,
+      "        )",
+    ];
+  });
+
+  return [
+    `ExposedDropdownMenuBox(expanded = ${expVar}, onExpandedChange = { ${expVar} = !${expVar} }, modifier = ${mod}) {`,
+    `    ${tfFn}(`,
+    `        value = ${valueExpr},`,
+    "        onValueChange = {},",
+    "        readOnly = true,",
+    `        label = { Text(${kotlinString(node.props.label)}) },`,
+    `        placeholder = { Text(${kotlinString(node.props.placeholder)}) },`,
+    `        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ${expVar}) },`,
+    "        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),",
+    "    )",
+    `    ExposedDropdownMenu(expanded = ${expVar}, onDismissRequest = { ${expVar} = false }) {`,
+    ...itemsLines,
+    "    }",
+    "}",
+  ];
+}
+
+function emitRadioGroup(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"RadioGroup">,
+  scope: ChildScope,
+): string[] {
+  ctx.needsSelection = true;
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
+  const options = node.props.options.length
+    ? node.props.options
+    : [{ value: "opt1", label: "Option 1" }];
+  const { valueExpr, assignExpr } = resolveBoundState(
+    ctx,
+    node,
+    toCamelCase(node.props.label || "radioChoice"),
+    kotlinString(node.props.selectedValue || options[0].value),
+  );
+  const actionExtra = emitActionBody(ctx, node, scope);
+
+  return [
+    `Column(modifier = ${mod}) {`,
+    ...(node.props.label
+      ? [`    Text(${kotlinString(node.props.label)}, style = MaterialTheme.typography.labelLarge)`]
+      : []),
+    ...options.flatMap((opt) => {
+      const valLit = kotlinString(opt.value);
+      const clickBody = actionExtra ? `${assignExpr(valLit)}; ${actionExtra}` : assignExpr(valLit);
+      return [
+        `    Row(`,
+        `        modifier = Modifier.fillMaxWidth().selectable(selected = ${valueExpr} == ${valLit}, onClick = { ${clickBody} }, role = Role.RadioButton).padding(vertical = 4.dp),`,
+        "        verticalAlignment = Alignment.CenterVertically,",
+        "    ) {",
+        `        RadioButton(selected = ${valueExpr} == ${valLit}, onClick = null)`,
+        "        Spacer(Modifier.width(8.dp))",
+        `        Text(${kotlinString(opt.label)}, style = MaterialTheme.typography.bodyMedium)`,
+        "    }",
+      ];
+    }),
+    "}",
+  ];
+}
+
+function emitTabs(
+  ctx: ScreenGenContext,
+  node: NodeOfType<"Tabs">,
+  scope: ChildScope,
+): string[] {
+  const mod = buildModifierExpr(node.style, childModOpts(scope));
+  const options = node.props.options.length
+    ? node.props.options
+    : [{ value: "tab1", label: "Tab 1" }];
+  const { valueExpr, assignExpr } = resolveBoundState(
+    ctx,
+    node,
+    toCamelCase(node.name || "selectedTab"),
+    kotlinString(node.props.selectedValue || options[0].value),
+  );
+  const actionExtra = emitActionBody(ctx, node, scope);
+  const indexExpr = `listOf(${options.map((o) => kotlinString(o.value)).join(", ")}).indexOf(${valueExpr}).coerceAtLeast(0)`;
+  const fn = node.props.variant === "secondary" ? "SecondaryTabRow" : "PrimaryTabRow";
+
+  return [
+    `${fn}(selectedTabIndex = ${indexExpr}, modifier = ${mod}) {`,
+    ...options.flatMap((opt) => {
+      const valLit = kotlinString(opt.value);
+      const clickBody = actionExtra ? `${assignExpr(valLit)}; ${actionExtra}` : assignExpr(valLit);
+      return [
+        "    Tab(",
+        `        selected = ${valueExpr} == ${valLit},`,
+        `        onClick = { ${clickBody} },`,
+        ...(opt.icon ? [`        icon = { Icon(${toMaterialIconRef(opt.icon)}, contentDescription = null) },`] : []),
+        `        text = { Text(${kotlinString(opt.label)}) },`,
+        "    )",
+      ];
+    }),
+    "}",
+  ];
+}
+
+function registerOverlayBlock(
+  ctx: ScreenGenContext,
+  node: ComponentNode,
+  scope: ChildScope,
+): string[] {
+  ctx.hasOverlayState = true;
+  if (node.type === "AlertDialog") {
+    const confirmStmts = actionStatements(
+      node.props.confirmAction,
+      ctx.routeMap,
+      (t) => recordBrokenNav(ctx, node.id, t),
+      actionOpts(ctx, scope),
+    );
+    const bodyStmts =
+      confirmStmts.includes("activeOverlayId = null") ||
+      confirmStmts.some((s) => s.startsWith("activeOverlayId = "))
+        ? confirmStmts
+        : [...confirmStmts, "activeOverlayId = null"];
+    ctx.overlayBlocks.push([
+      `if (activeOverlayId == ${kotlinString(node.id)}) {`,
+      "    AlertDialog(",
+      "        onDismissRequest = { activeOverlayId = null },",
+      ...(node.props.icon
+        ? [`        icon = { Icon(${toMaterialIconRef(node.props.icon)}, contentDescription = null) },`]
+        : []),
+      `        title = { Text(${kotlinTemplateString(node.props.title, ctx.hasAppState, scope.inItemScope)}) },`,
+      `        text = { Text(${kotlinTemplateString(node.props.message, ctx.hasAppState, scope.inItemScope)}) },`,
+      ...(node.props.dismissLabel
+        ? [
+            `        dismissButton = { TextButton(onClick = { activeOverlayId = null }) { Text(${kotlinString(node.props.dismissLabel)}) } },`,
+          ]
+        : []),
+      `        confirmButton = { Button(onClick = { ${bodyStmts.join("; ")} }) { Text(${kotlinString(node.props.confirmLabel)}) } },`,
+      "    )",
+      "}",
+    ]);
+    return [];
+  }
+
+  if (node.type === "ModalBottomSheet") {
+    const children = emitContainerChildren(ctx, node, {
+      parentKind: "column",
+      hasVerticalScrollAncestor: false,
+      inItemScope: scope.inItemScope,
+      itemCollectionKey: scope.itemCollectionKey,
+    });
+    ctx.overlayBlocks.push([
+      `if (activeOverlayId == ${kotlinString(node.id)}) {`,
+      "    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)",
+      "    ModalBottomSheet(",
+      "        onDismissRequest = { activeOverlayId = null },",
+      "        sheetState = sheetState,",
+      "    ) {",
+      "        Column(",
+      "            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),",
+      "            verticalArrangement = Arrangement.spacedBy(12.dp),",
+      "        ) {",
+      ...(node.props.title
+        ? [`            Text(${kotlinTemplateString(node.props.title, ctx.hasAppState, scope.inItemScope)}, style = MaterialTheme.typography.titleMedium)`]
+        : []),
+      ...indentLines(children, 12),
+      "        }",
+      "    }",
+      "}",
+    ]);
+    return [];
+  }
+  return [];
+}
+
 function emitDataList(
   ctx: ScreenGenContext,
   node: NodeOfType<"DataList">,
@@ -752,6 +971,22 @@ function emitDataList(
 function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): string[] {
   const node = ctx.screen.nodes[nodeId];
   if (!node) return [];
+
+  if (OVERLAY_TYPES.has(node.type)) {
+    return registerOverlayBlock(ctx, node, scope);
+  }
+
+  const lines = emitNodeBody(ctx, node, scope);
+  const condExpr = ctx.hasAppState
+    ? visibilityConditionExpr(node.visibleWhen, ctx.variableTypes)
+    : null;
+  if (condExpr && lines.length > 0) {
+    return [`if (${condExpr}) {`, ...indentLines(lines, 4), "}"];
+  }
+  return lines;
+}
+
+function emitNodeBody(ctx: ScreenGenContext, node: ComponentNode, scope: ChildScope): string[] {
   const modOpts = childModOpts(scope);
 
   switch (node.type) {
@@ -765,6 +1000,15 @@ function emitNode(ctx: ScreenGenContext, nodeId: string, scope: ChildScope): str
       return emitSegmentedButton(ctx, node, scope);
     case "DataList":
       return emitDataList(ctx, node, scope);
+    case "DropdownMenu":
+      return emitDropdownMenu(ctx, node, scope);
+    case "RadioGroup":
+      return emitRadioGroup(ctx, node, scope);
+    case "Tabs":
+      return emitTabs(ctx, node, scope);
+    case "AlertDialog":
+    case "ModalBottomSheet":
+      return [];
     case "Column": {
       const gap = node.props.connected ? Math.min(node.props.gap, 3) : node.props.gap;
       const hasFiniteHeight = typeof node.style.height === "number";
@@ -984,9 +1228,22 @@ export function generateScreenFile(
     appStateConfig && (appStateConfig.variables.length > 0 || appStateConfig.collections.length > 0),
   );
   const variableDefaults = new Map<string, string | boolean | number>();
+  const variableTypes = new Map<string, "string" | "boolean" | "number">();
   for (const v of appStateConfig?.variables ?? []) {
     variableDefaults.set(v.key, v.defaultValue);
+    variableTypes.set(v.key, v.type);
   }
+  const collectionFieldTypes = new Map<string, Map<string, "string" | "boolean" | "number">>();
+  for (const c of appStateConfig?.collections ?? []) {
+    const fMap = new Map<string, "string" | "boolean" | "number">();
+    for (const f of c.fields) fMap.set(f.key, f.type);
+    collectionFieldTypes.set(c.key, fMap);
+  }
+  const overlayIds = new Set(
+    Object.values(screen.nodes)
+      .filter((n) => OVERLAY_TYPES.has(n.type))
+      .map((n) => n.id),
+  );
 
   const ctx: ScreenGenContext = {
     screen,
@@ -995,11 +1252,17 @@ export function generateScreenFile(
     hasAppState,
     appStateConfig,
     variableDefaults,
+    variableTypes,
+    collectionFieldTypes,
+    overlayIds,
+    overlayBlocks: [],
+    hasOverlayState: overlayIds.size > 0,
     stateDecls: [],
     stateCounter: {},
     diagnostics,
     needsExperimentalLayout: false,
     needsLazyList: false,
+    needsSelection: false,
     reportedNestedScrollWarning: false,
   };
 
@@ -1049,6 +1312,7 @@ export function generateScreenFile(
         ]
       : []),
     "import androidx.compose.foundation.rememberScrollState",
+    ...(ctx.needsSelection ? ["import androidx.compose.foundation.selection.selectable"] : []),
     "import androidx.compose.foundation.shape.CircleShape",
     "import androidx.compose.foundation.shape.RoundedCornerShape",
     "import androidx.compose.foundation.verticalScroll",
@@ -1062,6 +1326,7 @@ export function generateScreenFile(
     "import androidx.compose.ui.draw.clip",
     "import androidx.compose.ui.graphics.Color",
     "import androidx.compose.ui.platform.LocalUriHandler",
+    ...(ctx.needsSelection ? ["import androidx.compose.ui.semantics.Role"] : []),
     "import androidx.compose.ui.text.style.TextAlign",
     "import androidx.compose.ui.unit.dp",
     ...(hasAppState ? [`import ${pkg}.ui.state.AppStateStore`] : []),
@@ -1077,8 +1342,9 @@ export function generateScreenFile(
     "    snackbarHost: @Composable () -> Unit = {},",
     ") {",
     "    val uriHandler = LocalUriHandler.current",
+    ...(ctx.hasOverlayState ? ["    var activeOverlayId by remember { mutableStateOf<String?>(null) }"] : []),
     ...indentLines(ctx.stateDecls, 4),
-    ...(ctx.stateDecls.length > 0 ? [""] : []),
+    ...(ctx.stateDecls.length > 0 || ctx.hasOverlayState ? [""] : []),
     "    Scaffold(",
     ...(topBarLines.length > 0
       ? ["        topBar = {", ...indentLines(topBarLines, 12), "        },"]
@@ -1101,6 +1367,9 @@ export function generateScreenFile(
     ...indentLines(bodyChildren, 12),
     "        }",
     "    }",
+    ...(ctx.overlayBlocks.length > 0
+      ? ["", ...ctx.overlayBlocks.flatMap((blk) => indentLines(blk, 4))]
+      : []),
     "}",
     "",
   ];

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { createNode } from "@/ast/factory";
+import { OVERLAY_TYPES } from "@/ast/types";
 import { isNodeContainer } from "@/components/canvas/M3Renderer";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
@@ -92,9 +93,10 @@ export function PartsPalette() {
     }
 
     const selected = selectedNodeId ? activeScreen.nodes[selectedNodeId] : undefined;
-    const targetParentId = isNodeContainer(selected)
-      ? selected!.id
-      : activeScreen.slots.bodyId;
+    const targetParentId =
+      !OVERLAY_TYPES.has(part.type) && isNodeContainer(selected)
+        ? selected!.id
+        : activeScreen.slots.bodyId;
     insertNode(targetParentId, createNode(part.type));
   };
 

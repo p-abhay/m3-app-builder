@@ -13,7 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { createNode } from "@/ast/factory";
 import { isContainerType } from "@/ast/operations";
-import type { ComponentType } from "@/ast/types";
+import { OVERLAY_TYPES, type ComponentType } from "@/ast/types";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
 import { Icon } from "../Icon";
@@ -140,6 +140,11 @@ export function BuilderDndProvider({ children }: { children: ReactNode }) {
         overData.slot === "fabId"
       ) {
         setSlotNode("fabId", createNode("FloatingActionButton"));
+        return;
+      }
+
+      if (OVERLAY_TYPES.has(type)) {
+        insertNode(activeScreen.slots.bodyId, createNode(type));
         return;
       }
 

@@ -1,6 +1,15 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { createId } from "@/ast/factory";
 import { moveNode } from "@/ast/operations";
-import type { ComponentNode, SegmentedOption, TransitionType, UserAction } from "@/ast/types";
+import {
+  OVERLAY_TYPES,
+  type ComponentNode,
+  type SegmentedOption,
+  type TopAppBarActionItem,
+  type TransitionType,
+  type UserAction,
+  type VisibilityCondition,
+} from "@/ast/types";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useM3Theme } from "@/theme/ThemeContext";
 import type { ColorTokenKey, TypeRole } from "@/theme/types";
@@ -109,6 +118,87 @@ function IconField({
   );
 }
 
+function formatKeyValuePairs(map: Record<string, string> | undefined): string {
+  return Object.entries(map ?? {})
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+}
+
+function parseKeyValuePairs(raw: string): Record<string, string> {
+  const nextMap: Record<string, string> = {};
+  for (const part of raw.split(",")) {
+    const [k, v] = part.split("=").map((s) => s.trim());
+    if (k && v) nextMap[k] = v;
+  }
+  return nextMap;
+}
+
+function OptionsListEditor({
+  options,
+  inputStyle,
+  onChange,
+}: {
+  options: SegmentedOption[];
+  inputStyle: CSSProperties;
+  onChange: (next: SegmentedOption[]) => void;
+}) {
+  const { palette } = useM3Theme();
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+          Options ({options.length})
+        </span>
+        <button
+          type="button"
+          onClick={() =>
+            onChange([...options, { value: `opt${options.length + 1}`, label: "Option" }])
+          }
+          className="text-[11px] font-semibold border-0 bg-transparent cursor-pointer"
+          style={{ color: palette.primary }}
+        >
+          + Add
+        </button>
+      </div>
+      {options.map((opt, idx) => (
+        <div key={`${opt.value}-${idx}`} className="flex items-center gap-1.5">
+          <input
+            type="text"
+            aria-label={`Option ${idx + 1} Value`}
+            value={opt.value}
+            onChange={(e) =>
+              onChange(options.map((o, i) => (i === idx ? { ...o, value: e.target.value } : o)))
+            }
+            className="w-20 px-2 py-1 text-xs font-mono outline-none"
+            style={inputStyle}
+          />
+          <input
+            type="text"
+            aria-label={`Option ${idx + 1} Label`}
+            value={opt.label}
+            onChange={(e) =>
+              onChange(options.map((o, i) => (i === idx ? { ...o, label: e.target.value } : o)))
+            }
+            className="flex-1 min-w-0 px-2 py-1 text-xs outline-none"
+            style={inputStyle}
+          />
+          {options.length > 1 && (
+            <button
+              type="button"
+              onClick={() => onChange(options.filter((_, i) => i !== idx))}
+              className="p-1 border-0 bg-transparent cursor-pointer"
+              style={{ color: palette.error }}
+              title="Remove option"
+            >
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () => void }) {
   const { palette, shapes } = useM3Theme();
   const project = useProjectStore((s) => s.project);
@@ -123,6 +213,7 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
   const updateNodeStyle = useProjectStore((s) => s.updateNodeStyle);
   const updateNodeAction = useProjectStore((s) => s.updateNodeAction);
   const updateNodeBindings = useProjectStore((s) => s.updateNodeBindings);
+  const updateNodeVisibility = useProjectStore((s) => s.updateNodeVisibility);
 
   const [iconPickerTarget, setIconPickerTarget] = useState<{
     propKey: string;
@@ -470,6 +561,120 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
                 })
               }
             />
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
+                  Action Icons ({node.props.actions.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextActions: TopAppBarActionItem[] = [
+                      ...node.props.actions,
+                      {
+                        id: createId("tbact"),
+                        icon: "settings",
+                        label: "Action",
+                        action: { type: "showSnackbar", message: "TopBar action tapped" },
+                      },
+                    ];
+                    updateNodeProps(node.id, { actions: nextActions });
+                  }}
+                  className="text-[11px] font-semibold border-0 bg-transparent cursor-pointer"
+                  style={{ color: palette.primary }}
+                >
+                  + Add Action
+                </button>
+              </div>
+              {node.props.actions.map((act, idx) => (
+                <div
+                  key={act.id}
+                  className="p-2 space-y-1.5 border"
+                  style={{
+                    borderRadius: shapes.small,
+                    borderColor: palette.outlineVariant,
+                    backgroundColor: palette.surfaceContainerLowest,
+                  }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      aria-label={`Action ${idx + 1} Icon`}
+                      value={act.icon}
+                      placeholder="icon"
+                      onChange={(e) => {
+                        const next = node.props.actions.map((item, i) =>
+                          i === idx ? { ...item, icon: e.target.value } : item,
+                        );
+                        updateNodeProps(node.id, { actions: next });
+                      }}
+                      className="w-24 px-2 py-1 text-xs font-mono outline-none"
+                      style={inputStyle}
+                    />
+                    <input
+                      type="text"
+                      aria-label={`Action ${idx + 1} Label`}
+                      value={act.label}
+                      placeholder="Label"
+                      onChange={(e) => {
+                        const next = node.props.actions.map((item, i) =>
+                          i === idx ? { ...item, label: e.target.value } : item,
+                        );
+                        updateNodeProps(node.id, { actions: next });
+                      }}
+                      className="flex-1 min-w-0 px-2 py-1 text-xs outline-none"
+                      style={inputStyle}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateNodeProps(node.id, {
+                          actions: node.props.actions.filter((_, i) => i !== idx),
+                        })
+                      }
+                      className="p-1 border-0 bg-transparent cursor-pointer"
+                      style={{ color: palette.error }}
+                      title="Remove TopBar action"
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                  <select
+                    aria-label={`Action ${idx + 1} Trigger`}
+                    value={act.action?.type ?? "none"}
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      let nextAct: UserAction = { type: "none" };
+                      if (nextType === "navigate") {
+                        nextAct = {
+                          type: "navigate",
+                          targetScreenId: project.screens[0]?.id ?? "",
+                          transition: "slide",
+                        };
+                      } else if (nextType === "showSnackbar") {
+                        nextAct = { type: "showSnackbar", message: act.label || "Action tapped" };
+                      } else if (nextType === "openOverlay") {
+                        const firstOv = Object.values(activeScreen.nodes).find((n) =>
+                          OVERLAY_TYPES.has(n.type),
+                        );
+                        nextAct = { type: "openOverlay", targetNodeId: firstOv?.id ?? "" };
+                      }
+                      const next = node.props.actions.map((item, i) =>
+                        i === idx ? { ...item, action: nextAct } : item,
+                      );
+                      updateNodeProps(node.id, { actions: next });
+                    }}
+                    className="w-full px-2 py-1 text-[11px] outline-none"
+                    style={inputStyle}
+                  >
+                    <option value="none">No Action</option>
+                    <option value="showSnackbar">Show Snackbar</option>
+                    <option value="navigate">Navigate to Screen</option>
+                    <option value="openOverlay">Open Overlay</option>
+                  </select>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1131,71 +1336,11 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
                 style={inputStyle}
               />
             </FieldRow>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold" style={{ color: palette.onSurfaceVariant }}>
-                  Options ({node.props.options.length})
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next: SegmentedOption[] = [
-                      ...node.props.options,
-                      { value: `opt${node.props.options.length + 1}`, label: "Option" },
-                    ];
-                    updateNodeProps(node.id, { options: next });
-                  }}
-                  className="text-[11px] font-semibold border-0 bg-transparent cursor-pointer"
-                  style={{ color: palette.primary }}
-                >
-                  + Add
-                </button>
-              </div>
-              {node.props.options.map((opt, idx) => (
-                <div key={`${opt.value}-${idx}`} className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    aria-label={`Option ${idx + 1} Value`}
-                    value={opt.value}
-                    onChange={(e) => {
-                      const next = node.props.options.map((o, i) =>
-                        i === idx ? { ...o, value: e.target.value } : o,
-                      );
-                      updateNodeProps(node.id, { options: next });
-                    }}
-                    className="w-20 px-2 py-1 text-xs font-mono outline-none"
-                    style={inputStyle}
-                  />
-                  <input
-                    type="text"
-                    aria-label={`Option ${idx + 1} Label`}
-                    value={opt.label}
-                    onChange={(e) => {
-                      const next = node.props.options.map((o, i) =>
-                        i === idx ? { ...o, label: e.target.value } : o,
-                      );
-                      updateNodeProps(node.id, { options: next });
-                    }}
-                    className="flex-1 min-w-0 px-2 py-1 text-xs outline-none"
-                    style={inputStyle}
-                  />
-                  {node.props.options.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = node.props.options.filter((_, i) => i !== idx);
-                        updateNodeProps(node.id, { options: next });
-                      }}
-                      className="p-1 border-0 bg-transparent cursor-pointer"
-                      style={{ color: palette.error }}
-                      title="Remove option"
-                    >
-                      <Icon name="close" size={14} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            <OptionsListEditor
+              options={node.props.options}
+              inputStyle={inputStyle}
+              onChange={(options) => updateNodeProps(node.id, { options })}
+            />
           </div>
         )}
 
@@ -1288,6 +1433,231 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
           </div>
         )}
 
+        {node.type === "DropdownMenu" && (
+          <div className="space-y-3">
+            <FieldRow label="Label">
+              <input
+                type="text"
+                value={node.props.label}
+                onChange={(e) => updateNodeProps(node.id, { label: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Placeholder">
+              <input
+                type="text"
+                value={node.props.placeholder}
+                onChange={(e) => updateNodeProps(node.id, { placeholder: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <div className="grid grid-cols-2 gap-2">
+              <FieldRow label="Variant">
+                <select
+                  value={node.props.variant}
+                  onChange={(e) => updateNodeProps(node.id, { variant: e.target.value })}
+                  className="w-full px-2 py-1 text-xs outline-none"
+                  style={inputStyle}
+                >
+                  <option value="outlined">Outlined</option>
+                  <option value="filled">Filled</option>
+                </select>
+              </FieldRow>
+              <FieldRow label="Default Value">
+                <input
+                  type="text"
+                  value={node.props.selectedValue}
+                  onChange={(e) => updateNodeProps(node.id, { selectedValue: e.target.value })}
+                  className="w-full px-2 py-1 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+            </div>
+            <OptionsListEditor
+              options={node.props.options}
+              inputStyle={inputStyle}
+              onChange={(options) => updateNodeProps(node.id, { options })}
+            />
+          </div>
+        )}
+
+        {node.type === "RadioGroup" && (
+          <div className="space-y-3">
+            <FieldRow label="Group Label">
+              <input
+                type="text"
+                value={node.props.label}
+                onChange={(e) => updateNodeProps(node.id, { label: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Selected Value">
+              <input
+                type="text"
+                value={node.props.selectedValue}
+                onChange={(e) => updateNodeProps(node.id, { selectedValue: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <OptionsListEditor
+              options={node.props.options}
+              inputStyle={inputStyle}
+              onChange={(options) => updateNodeProps(node.id, { options })}
+            />
+          </div>
+        )}
+
+        {node.type === "Tabs" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <FieldRow label="Variant">
+                <select
+                  value={node.props.variant}
+                  onChange={(e) => updateNodeProps(node.id, { variant: e.target.value })}
+                  className="w-full px-2 py-1 text-xs outline-none"
+                  style={inputStyle}
+                >
+                  <option value="primary">Primary</option>
+                  <option value="secondary">Secondary</option>
+                </select>
+              </FieldRow>
+              <FieldRow label="Default Tab">
+                <input
+                  type="text"
+                  value={node.props.selectedValue}
+                  onChange={(e) => updateNodeProps(node.id, { selectedValue: e.target.value })}
+                  className="w-full px-2 py-1 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+            </div>
+            <OptionsListEditor
+              options={node.props.options}
+              inputStyle={inputStyle}
+              onChange={(options) => updateNodeProps(node.id, { options })}
+            />
+          </div>
+        )}
+
+        {node.type === "AlertDialog" && (
+          <div className="space-y-3">
+            <FieldRow label="Dialog Title">
+              <input
+                type="text"
+                value={node.props.title}
+                onChange={(e) => updateNodeProps(node.id, { title: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Message Body">
+              <textarea
+                rows={2}
+                value={node.props.message}
+                onChange={(e) => updateNodeProps(node.id, { message: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none resize-y"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <IconField
+              label="Dialog Icon"
+              value={node.props.icon}
+              inputStyle={inputStyle}
+              onChange={(icon) => updateNodeProps(node.id, { icon })}
+              onOpenPicker={() =>
+                setIconPickerTarget({
+                  propKey: "icon",
+                  value: node.props.icon,
+                  allowEmpty: true,
+                })
+              }
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <FieldRow label="Confirm Label">
+                <input
+                  type="text"
+                  value={node.props.confirmLabel}
+                  onChange={(e) => updateNodeProps(node.id, { confirmLabel: e.target.value })}
+                  className="w-full px-2 py-1 text-xs outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+              <FieldRow label="Dismiss Label">
+                <input
+                  type="text"
+                  value={node.props.dismissLabel ?? ""}
+                  onChange={(e) =>
+                    updateNodeProps(node.id, { dismissLabel: e.target.value || undefined })
+                  }
+                  className="w-full px-2 py-1 text-xs outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+            </div>
+            <FieldRow label="Confirm Action">
+              <select
+                aria-label="Dialog Confirm Action"
+                value={node.props.confirmAction?.type ?? "dismissOverlay"}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  const firstCol = project.state?.collections[0]?.key ?? "todos";
+                  if (t === "deleteItem") {
+                    updateNodeProps(node.id, {
+                      confirmAction: {
+                        type: "deleteItem",
+                        collectionKey: firstCol,
+                        idStateKey: "editingId",
+                        navigateBackAfter: true,
+                        snackbarMessage: "Deleted!",
+                      },
+                    });
+                  } else if (t === "showSnackbar") {
+                    updateNodeProps(node.id, {
+                      confirmAction: { type: "showSnackbar", message: "Confirmed!" },
+                    });
+                  } else {
+                    updateNodeProps(node.id, {
+                      confirmAction: { type: "dismissOverlay" },
+                    });
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              >
+                <option value="dismissOverlay">Dismiss Dialog</option>
+                <option value="showSnackbar">Show Snackbar &amp; Dismiss</option>
+                <option value="deleteItem">Delete Item &amp; Dismiss</option>
+              </select>
+            </FieldRow>
+          </div>
+        )}
+
+        {node.type === "ModalBottomSheet" && (
+          <div className="space-y-3">
+            <FieldRow label="Sheet Title">
+              <input
+                type="text"
+                value={node.props.title ?? ""}
+                onChange={(e) => updateNodeProps(node.id, { title: e.target.value || undefined })}
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <label className="flex items-center justify-between py-1">
+              <span className="font-semibold">Show Drag Handle</span>
+              <input
+                type="checkbox"
+                checked={node.props.dragHandle}
+                onChange={(e) => updateNodeProps(node.id, { dragHandle: e.target.checked })}
+              />
+            </label>
+          </div>
+        )}
+
         {/* Style & Layout Section */}
         <div
           className="pt-3 border-t space-y-3"
@@ -1312,6 +1682,57 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               <option value="fill">Fill Width</option>
             </select>
           </FieldRow>
+          <div className="grid grid-cols-3 gap-2">
+            <FieldRow label="Height (dp)">
+              <input
+                type="number"
+                min={0}
+                placeholder="auto"
+                value={typeof node.style.height === "number" ? node.style.height : ""}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  updateNodeStyle(node.id, { height: raw ? Number(raw) : undefined });
+                }}
+                className="w-full px-2 py-1 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Padding (dp)">
+              <input
+                type="number"
+                min={0}
+                max={64}
+                value={node.style.padding?.top ?? ""}
+                placeholder="auto"
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  if (!raw) {
+                    updateNodeStyle(node.id, { padding: undefined });
+                  } else {
+                    const v = Math.max(0, Number(raw) || 0);
+                    updateNodeStyle(node.id, { padding: { top: v, right: v, bottom: v, left: v } });
+                  }
+                }}
+                className="w-full px-2 py-1 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+            <FieldRow label="Radius (dp)">
+              <input
+                type="number"
+                min={0}
+                max={48}
+                placeholder="auto"
+                value={node.style.cornerRadius ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  updateNodeStyle(node.id, { cornerRadius: raw ? Number(raw) : undefined });
+                }}
+                className="w-full px-2 py-1 text-xs outline-none"
+                style={inputStyle}
+              />
+            </FieldRow>
+          </div>
           <FieldRow label="Background Token">
             <select
               value={node.style.backgroundToken ?? "transparent"}
@@ -1388,6 +1809,88 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               style={inputStyle}
             />
           </FieldRow>
+        </div>
+
+        {/* Conditional Visibility Section */}
+        <div
+          className="pt-3 border-t space-y-2.5"
+          style={{ borderColor: palette.outlineVariant }}
+        >
+          <div
+            className="text-[11px] font-bold uppercase tracking-wider"
+            style={{ color: palette.onSurfaceVariant }}
+          >
+            Conditional Visibility
+          </div>
+          <FieldRow label="Show When State Variable">
+            <select
+              aria-label="Visibility State Variable"
+              value={node.visibleWhen?.stateKey ?? ""}
+              onChange={(e) => {
+                const stateKey = e.target.value;
+                updateNodeVisibility(
+                  node.id,
+                  stateKey
+                    ? {
+                        stateKey,
+                        operator: node.visibleWhen?.operator ?? "truthy",
+                        value: node.visibleWhen?.value,
+                      }
+                    : undefined,
+                );
+              }}
+              className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+              style={inputStyle}
+            >
+              <option value="">Always Visible</option>
+              {(project.state?.variables ?? []).map((v) => (
+                <option key={v.key} value={v.key}>
+                  {v.key} ({v.type})
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+          {node.visibleWhen?.stateKey && (
+            <div className="grid grid-cols-2 gap-2">
+              <FieldRow label="Condition">
+                <select
+                  aria-label="Visibility Operator"
+                  value={node.visibleWhen.operator}
+                  onChange={(e) =>
+                    updateNodeVisibility(node.id, {
+                      ...node.visibleWhen!,
+                      operator: e.target.value as VisibilityCondition["operator"],
+                    })
+                  }
+                  className="w-full px-2 py-1 text-xs outline-none"
+                  style={inputStyle}
+                >
+                  <option value="truthy">Is Truthy</option>
+                  <option value="falsy">Is Falsy</option>
+                  <option value="equals">Equals</option>
+                  <option value="notEquals">Not Equals</option>
+                </select>
+              </FieldRow>
+              {(node.visibleWhen.operator === "equals" ||
+                node.visibleWhen.operator === "notEquals") && (
+                <FieldRow label="Match Value">
+                  <input
+                    type="text"
+                    aria-label="Visibility Match Value"
+                    value={node.visibleWhen.value ?? ""}
+                    onChange={(e) =>
+                      updateNodeVisibility(node.id, {
+                        ...node.visibleWhen!,
+                        value: e.target.value,
+                      })
+                    }
+                    className="w-full px-2 py-1 text-xs outline-none"
+                    style={inputStyle}
+                  />
+                </FieldRow>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Click Action Section */}
@@ -1468,6 +1971,16 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
                     collectionKey: firstCol,
                     snackbarMessage: "Item deleted",
                   });
+                else if (nextType === "openOverlay") {
+                  const firstOv = Object.values(activeScreen.nodes).find((n) =>
+                    OVERLAY_TYPES.has(n.type),
+                  );
+                  updateNodeAction(node.id, {
+                    type: "openOverlay",
+                    targetNodeId: firstOv?.id ?? "",
+                  });
+                } else if (nextType === "dismissOverlay")
+                  updateNodeAction(node.id, { type: "dismissOverlay" });
               }}
               className="w-full px-2.5 py-1.5 text-xs outline-none"
               style={inputStyle}
@@ -1477,6 +1990,8 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               <option value="navigateBack">Navigate Back</option>
               <option value="showSnackbar">Show Snackbar</option>
               <option value="openUrl">Open URL</option>
+              <option value="openOverlay">Open Dialog / Sheet</option>
+              <option value="dismissOverlay">Dismiss Active Overlay</option>
               <option value="toggleState">Toggle State Variable</option>
               <option value="setState">Set State Variable</option>
               <option value="createItem">Create Collection Item</option>
@@ -1486,6 +2001,32 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
               <option value="deleteItem">Delete Collection Item</option>
             </select>
           </FieldRow>
+
+          {currentAction.type === "openOverlay" && (
+            <FieldRow label="Target Overlay (on current screen)">
+              <select
+                aria-label="Target Overlay"
+                value={currentAction.targetNodeId}
+                onChange={(e) =>
+                  updateNodeAction(node.id, {
+                    ...currentAction,
+                    targetNodeId: e.target.value,
+                  })
+                }
+                className="w-full px-2.5 py-1.5 text-xs outline-none"
+                style={inputStyle}
+              >
+                <option value="">Select overlay node...</option>
+                {Object.values(activeScreen.nodes)
+                  .filter((n) => OVERLAY_TYPES.has(n.type))
+                  .map((ov) => (
+                    <option key={ov.id} value={ov.id}>
+                      {ov.name || ov.type} ({ov.id})
+                    </option>
+                  ))}
+              </select>
+            </FieldRow>
+          )}
 
           {currentAction.type === "navigate" && (
             <>
@@ -1604,24 +2145,109 @@ export function PropertiesInspector({ onSwitchToTheme }: { onSwitchToTheme: () =
           )}
 
           {(currentAction.type === "createItem" || currentAction.type === "updateItem") && (
-            <FieldRow label="Field Map (field=stateKey, ...)">
+            <>
+              <FieldRow label="Field Map (field=stateKey, ...)">
+                <input
+                  type="text"
+                  value={formatKeyValuePairs(currentAction.fieldFromState)}
+                  onChange={(e) =>
+                    updateNodeAction(node.id, {
+                      ...currentAction,
+                      fieldFromState: parseKeyValuePairs(e.target.value),
+                    })
+                  }
+                  className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+              <FieldRow label="Clear State Keys After">
+                <input
+                  type="text"
+                  placeholder="quickTitle, draftTitle"
+                  value={(currentAction.clearStateKeys ?? []).join(", ")}
+                  onChange={(e) =>
+                    updateNodeAction(node.id, {
+                      ...currentAction,
+                      clearStateKeys: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+            </>
+          )}
+
+          {(currentAction.type === "updateItem" || currentAction.type === "deleteItem") && (
+            <FieldRow label="Selected ID Variable Key">
               <input
                 type="text"
-                value={Object.entries(currentAction.fieldFromState)
-                  .map(([f, k]) => `${f}=${k}`)
-                  .join(", ")}
-                onChange={(e) => {
-                  const nextMap: Record<string, string> = {};
-                  for (const part of e.target.value.split(",")) {
-                    const [f, k] = part.split("=").map((s) => s.trim());
-                    if (f && k) nextMap[f] = k;
-                  }
-                  updateNodeAction(node.id, { ...currentAction, fieldFromState: nextMap });
-                }}
+                placeholder="editingId (blank uses row item)"
+                value={currentAction.idStateKey ?? ""}
+                onChange={(e) =>
+                  updateNodeAction(node.id, {
+                    ...currentAction,
+                    idStateKey: e.target.value.trim() || undefined,
+                  })
+                }
                 className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
                 style={inputStyle}
               />
             </FieldRow>
+          )}
+
+          {currentAction.type === "selectItem" && (
+            <>
+              <FieldRow label="Target ID Variable Key">
+                <input
+                  type="text"
+                  value={currentAction.targetStateKey}
+                  onChange={(e) =>
+                    updateNodeAction(node.id, { ...currentAction, targetStateKey: e.target.value })
+                  }
+                  className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+              <FieldRow label="Navigate Screen (optional)">
+                <select
+                  aria-label="Select Item Target Screen"
+                  value={currentAction.targetScreenId ?? ""}
+                  onChange={(e) =>
+                    updateNodeAction(node.id, {
+                      ...currentAction,
+                      targetScreenId: e.target.value || undefined,
+                    })
+                  }
+                  className="w-full px-2.5 py-1.5 text-xs outline-none"
+                  style={inputStyle}
+                >
+                  <option value="">Stay on current screen</option>
+                  {project.screens.map((scr) => (
+                    <option key={scr.id} value={scr.id}>
+                      {scr.name}
+                    </option>
+                  ))}
+                </select>
+              </FieldRow>
+              <FieldRow label="Populate State (stateKey=field, ...)">
+                <input
+                  type="text"
+                  value={formatKeyValuePairs(currentAction.populateState)}
+                  onChange={(e) =>
+                    updateNodeAction(node.id, {
+                      ...currentAction,
+                      populateState: parseKeyValuePairs(e.target.value),
+                    })
+                  }
+                  className="w-full px-2.5 py-1.5 text-xs font-mono outline-none"
+                  style={inputStyle}
+                />
+              </FieldRow>
+            </>
           )}
 
           {(currentAction.type === "createItem" ||

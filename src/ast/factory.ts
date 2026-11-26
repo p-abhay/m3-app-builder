@@ -8,6 +8,7 @@ import type {
   ScreenNode,
   SpacingBox,
   UserAction,
+  VisibilityCondition,
 } from "./types.ts";
 
 let fallbackCounter = 0;
@@ -170,6 +171,47 @@ export const defaultPropsMap: { [K in ComponentType]: () => NodePropsMap[K] } = 
     emptyTitle: "No items match your filter",
     emptySubtitle: "Try clearing search or adding a new item.",
   }),
+  DropdownMenu: () => ({
+    label: "Category",
+    options: [
+      { value: "work", label: "Work" },
+      { value: "personal", label: "Personal" },
+      { value: "urgent", label: "Urgent" },
+    ],
+    selectedValue: "work",
+    placeholder: "Select category...",
+    variant: "outlined",
+  }),
+  RadioGroup: () => ({
+    label: "Delivery option",
+    options: [
+      { value: "standard", label: "Standard" },
+      { value: "priority", label: "Priority" },
+      { value: "express", label: "Express" },
+    ],
+    selectedValue: "standard",
+  }),
+  Tabs: () => ({
+    options: [
+      { value: "overview", label: "Overview" },
+      { value: "details", label: "Details" },
+      { value: "activity", label: "Activity" },
+    ],
+    selectedValue: "overview",
+    variant: "primary",
+  }),
+  AlertDialog: () => ({
+    title: "Confirm action?",
+    message: "This change will update your current screen state.",
+    icon: "warning",
+    confirmLabel: "Confirm",
+    dismissLabel: "Cancel",
+    confirmAction: { type: "dismissOverlay" },
+  }),
+  ModalBottomSheet: () => ({
+    title: "Options",
+    dragHandle: true,
+  }),
 };
 
 export function createDefaultStyle(type: ComponentType): ComponentStyle {
@@ -181,11 +223,15 @@ export function createDefaultStyle(type: ComponentType): ComponentStyle {
     case "Box":
       return { width: "fill" };
     case "Card":
+    case "ModalBottomSheet":
       return { width: "fill", padding: uniformSpacing(16) };
     case "TextField":
     case "SearchBar":
     case "SegmentedButton":
     case "DataList":
+    case "DropdownMenu":
+    case "RadioGroup":
+    case "Tabs":
     case "ListItem":
     case "Divider":
     case "Image":
@@ -204,6 +250,7 @@ export interface CreateNodeOptions<K extends ComponentType> {
   style?: Partial<ComponentStyle>;
   action?: UserAction;
   bindings?: NodeBindings;
+  visibleWhen?: VisibilityCondition;
 }
 
 export function createNode<K extends ComponentType>(
@@ -222,6 +269,7 @@ export function createNode<K extends ComponentType>(
     props: { ...baseProps, ...(opts.props ?? {}) },
     action: opts.action,
     ...(opts.bindings ? { bindings: opts.bindings } : {}),
+    ...(opts.visibleWhen ? { visibleWhen: opts.visibleWhen } : {}),
   } as unknown as NodeOfType<K>;
 }
 
@@ -233,6 +281,7 @@ export interface BlueprintNode {
   style?: Partial<ComponentStyle>;
   action?: UserAction;
   bindings?: NodeBindings;
+  visibleWhen?: VisibilityCondition;
   children?: BlueprintNode[];
 }
 
@@ -249,6 +298,7 @@ export function materializeBlueprint(
     style: blueprint.style,
     action: blueprint.action,
     bindings: blueprint.bindings,
+    visibleWhen: blueprint.visibleWhen,
   });
   nodes[node.id] = node;
   if (blueprint.children?.length) {

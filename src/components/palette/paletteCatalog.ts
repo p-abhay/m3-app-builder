@@ -6,6 +6,7 @@ export type PaletteCategory =
   | "navigation"
   | "inputs"
   | "display"
+  | "overlays"
   | "feedback";
 
 export interface PalettePartMeta {
@@ -20,9 +21,10 @@ export interface PalettePartMeta {
 export const PALETTE_CATEGORIES: { key: PaletteCategory; label: string; icon: string }[] = [
   { key: "layout", label: "Layout & Containment", icon: "dashboard" },
   { key: "actions", label: "Actions & Buttons", icon: "touch_app" },
-  { key: "navigation", label: "Scaffold Chrome", icon: "toolbar" },
+  { key: "navigation", label: "Navigation & Chrome", icon: "toolbar" },
   { key: "inputs", label: "Inputs & Selection", icon: "toggle_on" },
   { key: "display", label: "Display & Content", icon: "notes" },
+  { key: "overlays", label: "Overlays & Dialogs", icon: "layers" },
   { key: "feedback", label: "Progress & M3E", icon: "progress_activity" },
 ];
 
@@ -127,7 +129,7 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
     targetSlot: "body",
   },
 
-  // Scaffold Chrome
+  // Navigation & Chrome
   {
     type: "TopAppBar",
     label: "Top App Bar",
@@ -143,6 +145,14 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
     icon: "add_circle",
     category: "navigation",
     targetSlot: "fabId",
+  },
+  {
+    type: "Tabs",
+    label: "Tabs",
+    description: "Primary or secondary M3 tab bar",
+    icon: "tab",
+    category: "navigation",
+    targetSlot: "body",
   },
 
   // Inputs
@@ -186,6 +196,22 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
     category: "inputs",
     targetSlot: "body",
   },
+  {
+    type: "DropdownMenu",
+    label: "Dropdown",
+    description: "Exposed dropdown menu select",
+    icon: "arrow_drop_down_circle",
+    category: "inputs",
+    targetSlot: "body",
+  },
+  {
+    type: "RadioGroup",
+    label: "Radio Group",
+    description: "Single-choice radio button list",
+    icon: "radio_button_checked",
+    category: "inputs",
+    targetSlot: "body",
+  },
 
   // Display
   {
@@ -218,6 +244,24 @@ export const PALETTE_PARTS: PalettePartMeta[] = [
     description: "Status & label pill badge",
     icon: "new_releases",
     category: "display",
+    targetSlot: "body",
+  },
+
+  // Overlays & Dialogs
+  {
+    type: "AlertDialog",
+    label: "Alert Dialog",
+    description: "M3 confirmation & prompt modal",
+    icon: "warning",
+    category: "overlays",
+    targetSlot: "body",
+  },
+  {
+    type: "ModalBottomSheet",
+    label: "Bottom Sheet",
+    description: "Draggable modal sheet container",
+    icon: "bottom_sheets",
+    category: "overlays",
     targetSlot: "body",
   },
 

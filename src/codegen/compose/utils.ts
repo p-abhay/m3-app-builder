@@ -1,4 +1,9 @@
-import type { ComponentStyle, ScreenNode, UserAction } from "../../ast/types.ts";
+import type {
+  ComponentStyle,
+  ScreenNode,
+  UserAction,
+  VisibilityCondition,
+} from "../../ast/types.ts";
 import type { ColorTokenKey } from "../../theme/types.ts";
 
 const KOTLIN_KEYWORDS = new Set([
@@ -187,7 +192,7 @@ export function colorTokenExpr(token?: ColorTokenKey | "transparent"): string {
   return COLOR_TOKEN_TO_SCHEME[token] ?? "MaterialTheme.colorScheme.onSurface";
 }
 
-const AUTO_MIRRORED_ICONS: Record<string, string> = {
+export const AUTO_MIRRORED_ICONS: Record<string, string> = {
   arrow_back: "ArrowBack",
   arrow_forward: "ArrowForward",
   send: "Send",
@@ -198,9 +203,10 @@ const AUTO_MIRRORED_ICONS: Record<string, string> = {
   login: "Login",
   undo: "Undo",
   redo: "Redo",
+  sort: "Sort",
 };
 
-const ICON_ALIASES: Record<string, string> = {
+export const ICON_ALIASES: Record<string, string> = {
   lock_person: "Lock",
   palette: "Palette",
   dashboard_customize: "DashboardCustomize",
@@ -227,6 +233,18 @@ const ICON_ALIASES: Record<string, string> = {
   check: "Check",
   star: "Star",
   favorite: "Favorite",
+  flame: "LocalFireDepartment",
+  progress_activity: "Autorenew",
+  bottom_sheets: "VerticalSplit",
+  bottom_navigation: "ViewCompact",
+  toolbar: "WebAsset",
+  tab: "Tab",
+  arrow_drop_down_circle: "ArrowDropDownCircle",
+  arrow_drop_down: "ArrowDropDown",
+  arrow_drop_up: "ArrowDropUp",
+  radio_button_checked: "RadioButtonChecked",
+  checklist: "Checklist",
+  auto_awesome: "AutoAwesome",
 };
 
 /** Map a Material Symbols snake_case icon name to `Icons.Rounded.*` or `Icons.AutoMirrored.Rounded.*`. */
@@ -308,6 +326,59 @@ export interface ActionContextOptions {
   hasAppState?: boolean;
   inItemScope?: boolean;
   variableDefaults?: Map<string, string | boolean | number>;
+  variableTypes?: Map<string, "string" | "boolean" | "number">;
+  collectionFieldTypes?: Map<string, Map<string, "string" | "boolean" | "number">>;
+  overlayIds?: Set<string>;
+  onBrokenOverlay?: (targetNodeId: string) => void;
+}
+
+/** Build a Kotlin boolean condition expression for a `VisibilityCondition`. */
+export function visibilityConditionExpr(
+  condition: VisibilityCondition | undefined,
+  variableTypes?: Map<string, "string" | "boolean" | "number">,
+): string | null {
+  if (!condition || !condition.stateKey.trim()) return null;
+  const prop = `appState.${toCamelCase(condition.stateKey, "stateVar")}`;
+  const vType = variableTypes?.get(condition.stateKey) ?? "string";
+
+  if (condition.operator === "truthy" || condition.operator === "falsy") {
+    const base =
+      vType === "boolean"
+        ? prop
+        : vType === "number"
+          ? `${prop} != 0f`
+          : `(${prop}.isNotBlank() && !${prop}.equals("false", ignoreCase = true))`;
+    return condition.operator === "falsy" ? `!${base.startsWith("(") ? `(${base})` : base}` : base;
+  }
+
+  const targetVal = condition.value ?? "";
+  const neg = condition.operator === "notEquals";
+  if (vType === "boolean") {
+    const boolLit = targetVal.trim().toLowerCase() === "true" ? "true" : "false";
+    return `${prop} ${neg ? "!=" : "=="} ${boolLit}`;
+  }
+  if (vType === "number") {
+    return `${prop} ${neg ? "!=" : "=="} ${kotlinFloat(Number(targetVal) || 0)}`;
+  }
+  return `${neg ? "!" : ""}${prop}.equals(${kotlinString(targetVal)}, ignoreCase = true)`;
+}
+
+function buildFieldArgExpr(
+  colKey: string,
+  fKey: string,
+  sKey: string,
+  opts: ActionContextOptions,
+): string {
+  const sProp = `appState.${toCamelCase(sKey, "stateVar")}`;
+  const varType = opts.variableTypes?.get(sKey) ?? "string";
+  const colType = opts.collectionFieldTypes?.get(colKey)?.get(fKey) ?? varType;
+  let valueExpr = varType === "string" ? `${sProp}.trim()` : sProp;
+  if (varType === "number" && colType === "number") {
+    valueExpr = `${sProp}.toLong()`;
+  } else if (varType !== "string" && colType === "string") {
+    valueExpr = `${sProp}.toString()`;
+  }
+  return `${toCamelCase(fKey)} = ${valueExpr}`;
 }
 
 /** Emit a Kotlin action statement list for a `UserAction` inside callbacks (`onClick`). */
@@ -344,6 +415,14 @@ export function actionStatements(
       return [`onShowSnackbar(${kotlinString(action.message || "Action triggered")})`];
     case "openUrl":
       return [`uriHandler.openUri(${kotlinString(action.url)})`];
+    case "openOverlay":
+      if (opts.overlayIds && !opts.overlayIds.has(action.targetNodeId)) {
+        opts.onBrokenOverlay?.(action.targetNodeId);
+        return [`// Broken overlay target: ${action.targetNodeId}`];
+      }
+      return [`activeOverlayId = ${kotlinString(action.targetNodeId)}`];
+    case "dismissOverlay":
+      return ["activeOverlayId = null"];
     case "toggleState":
       if (hasAppState && action.stateKey) {
         const prop = `appState.${toCamelCase(action.stateKey, "stateVar")}`;
@@ -354,25 +433,34 @@ export function actionStatements(
       if (!hasAppState) return [`onShowSnackbar("State updated")`];
       {
         const prop = `appState.${toCamelCase(action.stateKey, "stateVar")}`;
+        const vType = opts.variableTypes?.get(action.stateKey);
         const val =
-          typeof action.value === "boolean"
-            ? (action.value ? "true" : "false")
-            : typeof action.value === "number"
-              ? `${action.value}f`
-              : kotlinString(action.value);
+          vType === "boolean" || typeof action.value === "boolean"
+            ? Boolean(action.value && String(action.value).toLowerCase() !== "false")
+              ? "true"
+              : "false"
+            : vType === "number" || typeof action.value === "number"
+              ? `${Number(action.value) || 0}f`
+              : kotlinString(String(action.value));
         return [`${prop} = ${val}`, "appState.notifyChanged()"];
       }
     case "createItem": {
       if (!hasAppState) return [];
       const colPascal = toPascalCase(action.collectionKey, "Items");
-      const args = Object.entries(action.fieldFromState).map(([fKey, sKey]) => {
-        const sProp = `appState.${toCamelCase(sKey, "stateVar")}`;
-        return `${toCamelCase(fKey)} = ${typeof sProp === "string" ? `${sProp}.trim()` : sProp}`;
-      });
+      const args = Object.entries(action.fieldFromState).map(([fKey, sKey]) =>
+        buildFieldArgExpr(action.collectionKey, fKey, sKey, opts),
+      );
       const stmts = [`appState.create${colPascal}(${args.join(", ")})`];
       for (const ck of action.clearStateKeys ?? []) stmts.push(resetExpr(ck));
       if (action.snackbarMessage) stmts.push(`onShowSnackbar(${kotlinString(action.snackbarMessage)})`);
       if (action.navigateBackAfter) stmts.push("onNavigateBack()");
+      const titleKey = action.fieldFromState.title;
+      if (titleKey && (opts.variableTypes?.get(titleKey) ?? "string") === "string") {
+        const tProp = `appState.${toCamelCase(titleKey, "stateVar")}`;
+        return [
+          `if (${tProp}.isBlank()) { onShowSnackbar("Please enter a title first") } else { ${stmts.join("; ")} }`,
+        ];
+      }
       return stmts;
     }
     case "selectItem": {
@@ -406,13 +494,20 @@ export function actionStatements(
         : inItemScope
           ? "item.id"
           : '""';
-      const args = Object.entries(action.fieldFromState).map(
-        ([fKey, sKey]) => `${toCamelCase(fKey)} = appState.${toCamelCase(sKey, "stateVar")}.trim()`,
+      const args = Object.entries(action.fieldFromState).map(([fKey, sKey]) =>
+        buildFieldArgExpr(action.collectionKey, fKey, sKey, opts),
       );
       const stmts = [`appState.upsert${colPascal}(id = ${idExpr}, ${args.join(", ")})`];
       for (const ck of action.clearStateKeys ?? []) stmts.push(resetExpr(ck));
       if (action.snackbarMessage) stmts.push(`onShowSnackbar(${kotlinString(action.snackbarMessage)})`);
       if (action.navigateBackAfter) stmts.push("onNavigateBack()");
+      const titleKey = action.fieldFromState.title;
+      if (titleKey && (opts.variableTypes?.get(titleKey) ?? "string") === "string") {
+        const tProp = `appState.${toCamelCase(titleKey, "stateVar")}`;
+        return [
+          `if (${tProp}.isBlank()) { onShowSnackbar("Please enter a title first") } else { ${stmts.join("; ")} }`,
+        ];
+      }
       return stmts;
     }
     case "toggleItemField": {

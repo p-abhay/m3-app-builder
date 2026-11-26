@@ -13,6 +13,7 @@ import {
   updateNodeBindings as updateNodeBindingsOp,
   updateNodeProps as updateNodePropsOp,
   updateNodeStyle as updateNodeStyleOp,
+  updateNodeVisibility as updateNodeVisibilityOp,
 } from "../ast/operations.ts";
 import { createEmptyAppState } from "../ast/state.ts";
 import { STARTER_TEMPLATES } from "../ast/templates.ts";
@@ -27,6 +28,7 @@ import type {
   PersistenceBackend,
   ScreenNode,
   UserAction,
+  VisibilityCondition,
 } from "../ast/types.ts";
 import { validateProject } from "../ast/validator.ts";
 import { DEFAULT_THEME } from "../theme/tokens.ts";
@@ -130,6 +132,7 @@ export interface ProjectStoreState {
   updateNodeStyle: (nodeId: string, stylePatch: Partial<ComponentStyle>) => void;
   updateNodeAction: (nodeId: string, action: UserAction | undefined) => void;
   updateNodeBindings: (nodeId: string, bindings: NodeBindings | undefined) => void;
+  updateNodeVisibility: (nodeId: string, visibleWhen: VisibilityCondition | undefined) => void;
 
   // App state, collections & persistence
   setPersistenceBackend: (backend: PersistenceBackend) => void;
@@ -488,6 +491,15 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     commit((proj) =>
       updateActiveScreenInProject(proj, activeScreenId, (scr) =>
         updateNodeBindingsOp(scr, nodeId, bindings),
+      ),
+    );
+  },
+
+  updateNodeVisibility: (nodeId, visibleWhen) => {
+    const { activeScreenId, commit } = get();
+    commit((proj) =>
+      updateActiveScreenInProject(proj, activeScreenId, (scr) =>
+        updateNodeVisibilityOp(scr, nodeId, visibleWhen),
       ),
     );
   },

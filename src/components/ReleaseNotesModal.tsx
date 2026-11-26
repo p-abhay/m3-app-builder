@@ -25,8 +25,43 @@ interface ReleaseGroup {
 const RELEASE_GROUPS: ReleaseGroup[] = [
   {
     version: APP_MILESTONE_LABEL,
-    subtitle: "State Variables, Collections, Search/Sort & Pluggable Persistence",
+    subtitle: "Core M3 Building Blocks, Modal Overlays, Tablet NavigationRail & Export Preflight",
     isCurrent: true,
+    items: [
+      {
+        title: "Core Controls & Modal Overlays",
+        icon: "layers",
+        tag: "Phase 9",
+        points: [
+          "Expanded to 30 Material 3 components with DropdownMenu (ExposedDropdownMenuBox), RadioGroup, Tabs (Primary/SecondaryTabRow), AlertDialog, and container ModalBottomSheet.",
+          "Added openOverlay / dismissOverlay actions with interactive Material 3 scrim animations in Preview and native Compose ModalBottomSheet / AlertDialog output.",
+          "Added Conditional Visibility (visibleWhen) rules evaluated in Preview and compiled as Kotlin if(...) blocks.",
+        ],
+      },
+      {
+        title: "Adaptive Tablet Chrome & Studio UX Completeness",
+        icon: "tablet_android",
+        tag: "Phase 9",
+        points: [
+          "Adaptive NavigationBar ↔ NavigationRail automatically switches on Tablet viewports in Preview and compiles responsive BoxWithConstraints (>= 600.dp) layouts in AppNavHost.kt.",
+          "Full TopAppBar right-side action icon & trigger editor plus layout Height / Padding / Radius controls in Properties Inspector.",
+          "Custom Collection Field Schema and Seed Row editor directly inside the Data sidebar tab.",
+        ],
+      },
+      {
+        title: "In-Browser Static Preflight Verifier & Typed Codegen",
+        icon: "verified",
+        tag: "Export",
+        points: [
+          "Instant client-side Preflight Diagnostics inside Export Kotlin checking brace/paren balance, Compose material-icons-extended symbols, state bindings, overlays, routes & XML safety.",
+          "Type-safe Compose CRUD actionStatements (.trim() restricted to String variables with non-blank title guard) and expanded Material Symbols icon mappings.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "v0.3.0",
+    subtitle: "State Variables, Collections, Search/Sort & Pluggable Persistence",
     items: [
       {
         title: "State Variables, Collections & CRUD Runtime",
@@ -134,27 +169,28 @@ const RELEASE_GROUPS: ReleaseGroup[] = [
 
 const FUTURE_ROADMAP: FeatureItem[] = [
   {
-    title: "AI Screen Co-Pilot & Design Spec Bridge",
+    title: "Local Gradle Build, APK Download & ADB Device Deploy",
+    icon: "build_circle",
+    tag: "v0.5.0 • Next",
+    points: [
+      "Abstract AndroidBuildService & DeviceDeployService backed by a local companion bridge running Gradle assembleDebug, streaming compiler logs, and serving downloadable app-debug.apk.",
+      "One-click adb install & Activity launch onto connected USB phones, Wi-Fi ADB devices, or Android Emulators—plus a guided Setup Prerequisites Doctor (JDK 17, Android SDK, Gradle & USB Debugging).",
+    ],
+  },
+  {
+    title: "GitHub Actions Export Compile CI & Sample APKs",
+    icon: "rocket_launch",
+    tag: "v0.6.0",
+    points: [
+      "Automated GitHub Actions Gradle compilation check on codegen/AST PRs with downloadable sample APK workflow artifacts.",
+    ],
+  },
+  {
+    title: "AI Co-Pilot, Cloud Previews & Production GA",
     icon: "auto_awesome",
-    tag: "v0.4.0 • Next",
-    points: [
-      "One-click Copy AI Spec exporting compact AST/token contracts for coding agents, plus validated AST patch import with Undo.",
-    ],
-  },
-  {
-    title: "Adaptive Navigation Rail, Bottom Sheets & Dialogs",
-    icon: "tablet_android",
-    tag: "v0.4.0",
-    points: [
-      "Automatic NavigationBar → NavigationRail adaptation on Tablet viewports, plus ModalBottomSheet and AlertDialog overlays.",
-    ],
-  },
-  {
-    title: "Cloud APK Preview & Production GA",
-    icon: "cloud_upload",
     tag: "v1.0.0 Target",
     points: [
-      "Push generated Kotlin Compose projects straight to GitHub, trigger cloud APK builds, and finalize 1.0 production stability.",
+      "Compact AI design spec / AST patch bridge, GitHub repository export sync, cloud Android builds, and 1.0 production stability.",
     ],
   },
 ];
